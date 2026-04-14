@@ -1,6 +1,14 @@
 import './App.css'
 
 export default function App() {
+  const [currentUrl, setCurrentUrl] = useState('Loading...')
+
+  useEffect(() => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const url = tabs[0]?.url ?? 'No active tab URL found'
+      setCurrentUrl(url)
+    })
+  }, [])
 
   return (
     <div className = "container">
