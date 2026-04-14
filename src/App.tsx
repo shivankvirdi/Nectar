@@ -1,12 +1,27 @@
+import { useEffect, useState } from 'react'
 import './App.css'
 
 export default function App() {
   const [currentUrl, setCurrentUrl] = useState('Loading...')
 
   useEffect(() => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       const url = tabs[0]?.url ?? 'No active tab URL found'
       setCurrentUrl(url)
+
+      if (!tabs[0]?.url) return
+
+      try {
+        await fetch('http://127.0.0.1:5000/current-url', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ url: tabs[0].url }),
+        })
+      } catch (error) {
+        console.error('Failed to send URL to backend:', error)
+      }
     })
   }, [])
 
