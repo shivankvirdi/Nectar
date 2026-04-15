@@ -1,9 +1,20 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 
+type Analysis = {
+  productKeyword?: string
+  asin?: string
+  title?: string
+  price?: string | number | null
+  rating?: string | number | null
+  reviewCount?: number | null
+  brand?: string | null
+}
+
 export default function App() {
   const [currentUrl, setCurrentUrl] = useState('Loading...')
   const [backendStatus, setBackendStatus] = useState('Waiting for backend...')
+  const [analysis, setAnalysis] = useState<Analysis | null>(null)
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
@@ -26,6 +37,15 @@ export default function App() {
 
         const data = await response.json()
         console.log('Backend response:', data)
+
+        if (!response.ok) {
+          const errorMessage =
+            typeof data.detail === 'string' ? data.detail : 'Backend request failed.'
+          setBackendStatus(errorMessage)
+          return
+        }
+
+        setAnalysis(data.analysis ?? null)
         setBackendStatus(`Sent to backend: ${data.ok ? 'success' : 'failed'}`)
       } catch (error) {
         console.error('Failed to send URL:', error)
@@ -45,6 +65,11 @@ export default function App() {
       </div>
 
       <div className="card">
+        <h3>Premium</h3>
+        <h1>{analysis?.rating ? `${analysis.rating} / 5` : 'Waiting...'}</h1>
+      </div>
+
+      <div className="card">
         <h3>Current Page</h3>
         <p className="desc">{currentUrl}</p>
       </div>
@@ -55,12 +80,14 @@ export default function App() {
       </div>
 
       <div className="card">
-        <h3>Review Integrity</h3>
-        <div className="progress">
-          <div className="progress-fill"></div>
-        </div>
+        <h3>Product Match</h3>
+        <p className="desc">Keyword: {analysis?.productKeyword ?? 'Not detected yet'}</p>
+        <p className="desc">ASIN: {analysis?.asin ?? 'Not found yet'}</p>
+        <p className="desc">Title: {analysis?.title ?? 'Waiting for Canopy...'}</p>
+        <p className="desc">Brand: {analysis?.brand ?? 'Waiting for Canopy...'}</p>
+        <p className="desc">Price: {analysis?.price ?? 'Waiting for Canopy...'}</p>
         <p className="desc">
-          Most reviews appear organic and verified.
+          Reviews: {analysis?.reviewCount != null ? analysis.reviewCount : 'Waiting for Canopy...'}
         </p>
       </div>
     </div>
