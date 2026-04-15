@@ -71,6 +71,7 @@ export default defineConfig([
   },
 ])
 ```
+<<<<<<< HEAD
 
 # Dependencies for Vision Model
 First, install git (https://git-scm.com/install/) to download CLIP package.
@@ -85,3 +86,5 @@ $ pip install ftfy regex tqdm
 $ pip install git+https://github.com/openai/CLIP.git
 ```
 Replace cudatoolkit=11.0 above with the appropriate CUDA version on your machine or cpuonly when installing on a machine without a GPU.
+=======
+>>>>>>> a485975278572ab516bb5d28e998a62913ac2db8
