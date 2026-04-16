@@ -17,10 +17,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 class UrlPayload(BaseModel):
     url: str
-
 
 @app.get("/health")
 async def health():
@@ -30,41 +28,9 @@ async def health():
 @app.post("/current-url")
 async def analyze_product(payload: UrlPayload):
     try:
-        # 1. Core product analysis (vision model / canopy)
-        product_analysis = analyze_product_url(payload.url)
-
-        asin = product_analysis.get("asin")
-        brand = product_analysis.get("brand")
-
-        if not asin:
-            raise HTTPException(
-                status_code=400,
-                detail="ASIN could not be extracted from URL"
-            )
-
-        # 2. Review integrity (Amazon reviews via Canopy)
-        full_profile = get_full_product_profile(asin)
-        reviews = full_profile.get("reviews", [])
-        review_integrity = analyze_review_integrity(reviews)
-
-        # 3. Brand reputation (Trustpilot scraping)
-        brand_reputation = get_brand_reputation(brand) if brand else {
-            "error": "Brand not found"
-        }
-
-        # 4. Unified response
-        return {
-            "ok": True,
-            "product_analysis": product_analysis,
-            "review_integrity": review_integrity,
-            "brand_reputation": brand_reputation
-        }
-
-    except HTTPException as e:
-        raise e
-
+        analysis = analyze_product_url(payload.url)
+        return { "ok": True, "analysis": analysis }  # key matches frontend
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
