@@ -194,12 +194,12 @@ def build_reputation_insights(reviews: list, brand_name: str) -> dict:
         # Return a neutral fallback so the pipeline doesn't crash
         return {
             "brand": brand_name,
-            "reputation_score_pct": 50,
+            "reputation_score_pct": None,
             "overall_label": "Insufficient Trustpilot data found for this brand.",
             "insights": [
-                {"topic": "Customer Satisfaction", "status": "Neutral"},
-                {"topic": "Review Sentiment",       "status": "Neutral"},
-                {"topic": "Overall Brand Trust",    "status": "Neutral"},
+                {"topic": "Customer Satisfaction", "status": "N/A"},
+                {"topic": "Review Sentiment",       "status": "N/A"},
+                {"topic": "Overall Brand Trust",    "status": "N/A"},
             ],
             "reviews_analyzed": 0,
         }
@@ -266,15 +266,36 @@ def build_reputation_insights(reviews: list, brand_name: str) -> dict:
 
     # Convert compound score (-1 to +1) → 0–100 percentage for the UI progress bar
     # Formula: shift range from [-1,+1] to [0,2], then scale to [0,100]
-    reputation_score_pct = round(((avg_compound + 1) / 2) * 100) if total > 0 else None
+    if total > 0:
+        if avg_compound >= 0.2:
+            reputation_score_pct = 90
+        elif avg_compound >= 0.05:
+            reputation_score_pct = 80
+        elif avg_compound >= -0.05:
+            reputation_score_pct = 70
+        elif avg_compound >= -0.2:
+            reputation_score_pct = 55
+        else:
+            reputation_score_pct = 35
+    else:
+        reputation_score_pct = None
 
     # Overall label shown under the score
-    if avg_compound >= 0.15:
-        overall_label = "Positive brand reputation on Trustpilot."
-    elif avg_compound >= 0.0:
-        overall_label = "Mixed reviews — some concerns noted on Trustpilot."
+    avg_rating = sum(review.get("rating", 3) for review in reviews) / total if total > 0 else 3
+
+    sentiment_score = ((avg_compound + 1) / 2) * 100
+    rating_score = (avg_rating / 5) * 100
+
+    reputation_score_pct = round((sentiment_score * 0.45) + (rating_score * 0.55)) if total > 0 else None
+
+    if reputation_score_pct >= 80:
+        overall_label = "Strong overall brand reputation on Trustpilot."
+    elif reputation_score_pct >= 65:
+        overall_label = "Mostly positive brand reputation with some concerns."
+    elif reputation_score_pct >= 50:
+        overall_label = "Mixed brand reputation on Trustpilot."
     else:
-        overall_label = "Significant negative sentiment found on Trustpilot."
+        overall_label = "Weak brand reputation based on recent Trustpilot reviews."
 
     return {
         "brand": brand_name,

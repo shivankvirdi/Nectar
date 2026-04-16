@@ -86,7 +86,7 @@ def analyze_product_url(url: str) -> dict:
 
     rating = product.get("rating")
     integrity_score = review_integrity.get("integrity_score_pct", 50)
-    reputation_score = brand_reputation.get("reputation_score_pct", 50)
+    reputation_score = brand_reputation.get("reputation_score_pct") or 50
 
     overall_score = build_overall_score(rating, integrity_score, reputation_score)
 
