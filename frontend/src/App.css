@@ -1,7 +1,7 @@
 :root {
   font-family: "Quicksand", system-ui, sans-serif;
   color: #1e1e1e;
-  background: #000;
+  background: #f5f5f4;
 }
 
 * {
@@ -10,9 +10,21 @@
 
 html, body, #root {
   margin: 0;
-  min-width: 360px;
-  min-height: 640px;
-  background: #000;
+  padding: 0;
+  width: 380px;
+  height: 600px;
+  overflow: hidden;
+  background: #f5f5f4;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+#root::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
 }
 
 body {
@@ -20,21 +32,52 @@ body {
 }
 
 .app-shell {
-  min-height: 100vh;
-  background: #000;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 16px;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #f5f5f4;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  overflow: hidden;
 }
 
 .phone-frame {
   width: 100%;
-  max-width: 390px;
-  background: #f7f6f3;
-  border-radius: 34px;
-  padding: 14px;
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+  height: 100%;
+  margin: 0;
+  padding: 20px 16px 24px;
+  background: #f5f5f4;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  border-radius: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.phone-frame::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+.phone-frame::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.phone-frame::-webkit-scrollbar-thumb {
+  background: transparent !important;
+  border: none !important;
+}
+
+.phone-frame::-webkit-scrollbar-corner {
+  background: transparent !important;
 }
 
 .top-header {
@@ -238,12 +281,12 @@ body {
 
 @media (max-width: 420px) {
   .app-shell {
-    padding: 10px;
+    padding: 0;
   }
 
   .phone-frame {
-    border-radius: 28px;
-    padding: 12px;
+    padding: 20px 16px 24px;
+    border-radius: 0;
   }
 
   .top-header {

@@ -20,14 +20,12 @@
 /* RESET */
 * {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
 }
 
 /* FLOATING EXTENSION BACKGROUND */
 body {
   background: transparent;
-  display: flex;
+  overflow: hidden;
   justify-content: center;
   align-items: center;
   height: 100vh;
