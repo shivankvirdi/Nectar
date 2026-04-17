@@ -68,6 +68,7 @@ export default function App() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [hasScanned, setHasScanned] = useState(false)
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -116,6 +117,7 @@ export default function App() {
 
         setAnalysis(data.analysis ?? null)
         setBackendStatus('Analysis complete')
+        setHasScanned(true)
       } catch (err) {
         console.error('Failed to send URL:', err)
         const message = 'Backend request failed. Is FastAPI running on port 8000?'
@@ -155,6 +157,12 @@ export default function App() {
             </button>
           </SectionCard>
 
+          <SectionCard title="System Status">
+            <p className={`body-text ${error ? 'status-error' : 'status-ok'}`}>
+              {error || backendStatus}
+            </p>
+          </SectionCard>
+          {hasScanned && (
           <SectionCard title="Overall Score">
             <div className="score-row">
               <span className="score-number">
@@ -164,21 +172,10 @@ export default function App() {
             </div>
             <MetricBar label="Trust Score" value={analysis?.overallScore} />
           </SectionCard>
-
-          <SectionCard title="Current Page">
-            <p className="body-text url-text">{currentUrl}</p>
-          </SectionCard>
-
-          <SectionCard title="System Status">
-            <p className={`body-text ${error ? 'status-error' : 'status-ok'}`}>
-              {error || backendStatus}
-            </p>
-          </SectionCard>
-
+          )}
+          {hasScanned && (
           <SectionCard title="Product">
             <div className="info-list">
-              <p><strong>Keyword:</strong> {analysis?.productKeyword ?? 'Not detected yet'}</p>
-              <p><strong>ASIN:</strong> {analysis?.asin ?? 'Not found yet'}</p>
               <p><strong>Title:</strong> {analysis?.title ?? 'Waiting...'}</p>
               <p><strong>Brand:</strong> {analysis?.brand ?? 'Waiting...'}</p>
               <p><strong>Price:</strong> {analysis?.price ?? 'Waiting...'}</p>
@@ -186,7 +183,8 @@ export default function App() {
               <p><strong>Review Count:</strong> {analysis?.reviewCount ?? 'Waiting...'}</p>
             </div>
           </SectionCard>
-
+          )}
+          {hasScanned && (
           <SectionCard title="Review Integrity">
             <div className="mini-score">
               <span>Score</span>
@@ -207,7 +205,8 @@ export default function App() {
               </p>
             </div>
           </SectionCard>
-
+          )}
+          {hasScanned &&(
           <SectionCard title="Brand Reputation">
             <div className="mini-score">
               <span>Score</span>
@@ -237,6 +236,7 @@ export default function App() {
               <p className="body-text muted">No brand insights yet.</p>
             )}
           </SectionCard>
+          )}
         </div>
       </div>
     </main>
