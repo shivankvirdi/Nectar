@@ -22,12 +22,14 @@ type Analysis = {
     label?: string
     verifiedPurchaseRatio?: number
     sentimentConsistencyRatio?: number
+    commonKeywords?: string[]
   }
   brandReputation?: {
     score?: number
     label?: string
     insights?: Insight[]
     reviewsAnalyzed?: number
+    commonKeywords?: string[]
   }
   similarProducts?: {
     title?: string
@@ -212,6 +214,10 @@ export default function App() {
                     <strong>Sentiment Consistency:</strong>{' '}
                     {analysis?.reviewIntegrity?.sentimentConsistencyRatio ?? 'Waiting...'}
                   </p>
+                  <p>
+                    <strong>Keywords: </strong>{' '}
+                    {analysis?.reviewIntegrity?.commonKeywords?.length? analysis?.reviewIntegrity?.commonKeywords.join(', '): 'No keywords found'}
+                  </p>
                 </div>
               </SectionCard>
 
@@ -246,6 +252,10 @@ export default function App() {
                 ) : (
                   <p className="body-text muted">No brand insights yet.</p>
                 )}
+                  <p>
+                    <strong>Keywords: </strong>{' '}
+                    {analysis?.brandReputation?.commonKeywords?.length? analysis?.brandReputation?.commonKeywords.join(', '): 'No keywords found'}
+                  </p>
               </SectionCard>
 
               <SectionCard title="Similar Products">
