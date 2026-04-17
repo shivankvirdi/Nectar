@@ -252,20 +252,42 @@ export default function App() {
                 {(analysis?.similarProducts?.length ?? 0) > 0 ? (
                   <div className="similar-scroll">
                     {analysis?.similarProducts?.map((product, i) => (
-                      <a key={i}
+                      <a
+                        key={product.asin ?? i}
                         href={product.amazonUrl}
                         target="_blank"
                         rel="noreferrer"
                         className="similar-card"
                       >
-                        {product.image && (
-                          <img src={product.image} alt={product.title} />
+                        {product.image ? (
+                          <img
+                            src={product.image}
+                            alt={product.title ?? 'Similar product'}
+                            className="similar-card-image"
+                          />
+                        ) : (
+                          <div className="similar-card-image placeholder">No Image</div>
                         )}
-                        <p className="similar-card-title">{product.title}</p>
-                        <p className="similar-card-brand">{product.brand}</p>
-                        <p className="similar-card-price">{product.price}</p>
-                        <p className="similar-card-rating">⭐ {product.rating}</p>
-                        {product.isPrime && <p className="similar-card-prime">✓ Prime</p>}
+
+                        <p className="similar-card-title">
+                          {product.title ?? 'Untitled Product'}
+                        </p>
+
+                        <p className="similar-card-brand">
+                          {product.brand ?? 'Unknown brand'}
+                        </p>
+
+                        <p className="similar-card-price">
+                          {product.price ?? 'No price'}
+                        </p>
+
+                        <p className="similar-card-rating">
+                          ⭐ {product.rating ?? 'N/A'}
+                        </p>
+
+                        {product.isPrime && (
+                          <p className="similar-card-prime">Prime</p>
+                        )}
                       </a>
                     ))}
                   </div>

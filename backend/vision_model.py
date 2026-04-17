@@ -81,8 +81,10 @@ def analyze_product_url(url: str) -> dict:
     }
 
     similar_products = []
-    if product_keyword != "unknown":
-        similar_products = search_similar_products(product_keyword)
+    search_term = product_keyword if product_keyword != "unknown" else product.get("title", "")
+
+    if search_term:
+        similar_products = search_similar_products(search_term)
 
     rating = product.get("rating")
     integrity_score = review_integrity.get("integrity_score_pct", 50)
@@ -128,7 +130,7 @@ def analyze_product_url(url: str) -> dict:
                 "price": (item.get("price") or {}).get("display"),
                 "isPrime": item.get("isPrime"),
                 "image": item.get("mainImageUrl"),              ## thumbnail for each product
-                "amazonUrl": f"https://www.amazon.com/dp/{'asin'}",  ## clickable amazon link for each product
+                "amazonUrl": f"https://www.amazon.com/dp/{item.get('asin')}",  ## clickable amazon link for each product
             }
             for item in similar_products[:5] ## 5 different products in array form
         ],

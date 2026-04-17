@@ -277,78 +277,62 @@ body {
 }
 
 .similar-scroll {
- display: flex;
- overflow-x: auto;
- gap: 10px;
- padding-bottom: 6px;
- scrollbar-width: none;
- -ms-overflow-style: none;
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  scrollbar-width: thin;
 }
-
-
-.similar-scroll::-webkit-scrollbar {
- display: none;
-}
-
 
 .similar-card {
- min-width: 130px;
- flex-shrink: 0;
- background: var(--surface2);
- border: 1px solid var(--border);
- border-radius: 12px;
- padding: 10px;
- text-decoration: none;
- color: var(--text);
- display: block;
+  min-width: 160px;
+  max-width: 160px;
+  flex-shrink: 0;
+  background: #ffffff;
+  border: 1px solid #e7e5e4;
+  border-radius: 14px;
+  padding: 10px;
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-
-.similar-card img {
- width: 100%;
- border-radius: 8px;
- margin-bottom: 6px;
- object-fit: contain;
+.similar-card-image {
+  width: 100%;
+  height: 110px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #f5f5f4;
 }
 
+.similar-card-image.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #78716c;
+  font-size: 12px;
+}
 
 .similar-card-title {
- font-size: 11px;
- font-weight: 700;
- color: var(--text);
- margin: 0 0 4px;
- display: -webkit-box;
- -webkit-line-clamp: 2;
- -webkit-box-orient: vertical;
- overflow: hidden;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
-
-.similar-card-brand {
- font-size: 11px;
- color: var(--text-muted);
- margin: 0 0 2px;
+.similar-card-brand,
+.similar-card-rating,
+.similar-card-prime {
+  margin: 0;
+  font-size: 11px;
+  color: #57534e;
 }
-
 
 .similar-card-price {
- font-size: 12px;
- font-weight: 700;
- color: var(--brand);
- margin: 0 0 2px;
-}
-
-
-.similar-card-rating {
- font-size: 11px;
- color: var(--text-muted);
- margin: 0;
-}
-
-
-.similar-card-prime {
- font-size: 10px;
- color: #00a8e1;
- font-weight: 700;
- margin: 4px 0 0;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ea580c;
 }
