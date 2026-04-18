@@ -9,11 +9,11 @@ python -m venv .venv
 .venv/Scripts/activate
 pip install -r requirements.txt
 ```
-Also install node.js (http://nodejs.org/en/download) and add to PATH
-# Create .env file in root:
+Also install node.js (http://nodejs.org/en/download) and add to PATH.
+# Create .env file in root and add this code:
 ```
-CANOPY_API_KEY=your_api_key_here
-GROQ_API_KEY=your_api_key_here
+CANOPY_API_KEY="your_api_key_here"
+GROQ_API_KEY="your_api_key_here"
 ```
 # How to run:
 ```
@@ -22,4 +22,4 @@ cd frontend
 npm install
 npm run build #sets up frontend
 ```
-Go to chrome://extensions/, turn on "Developer mode", click load unpacked, and upload GDGC-Ballers/frontend/dist file
+Go to chrome://extensions/, turn on "Developer mode", click load unpacked, and upload GDGC-Ballers/frontend/dist file. We hope you enjoy using our extension!
