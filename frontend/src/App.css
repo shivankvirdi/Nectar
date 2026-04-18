@@ -40,9 +40,11 @@ body {
   z-index: 20;
   flex-shrink: 0;
 
-  background: #f6e3d8;
+  background: rgba(246, 227, 216, 0.88);
   color: white;
   border-bottom: 1px solid #ebe6e1;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 
   padding: 18px 18px;
   display: flex;
@@ -112,10 +114,10 @@ body {
 .content {
   flex: 1;
   min-height: 0;
-  padding: 14px 16px 16px;
+  padding: 16px 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   scroll-behavior: smooth;
   overflow-y: auto;
   scrollbar-width: none;
@@ -134,6 +136,13 @@ body {
   border-radius: 20px;
   padding: 15px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.section-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.06);
+  border-color: #e7ddd6;
 }
 
 .section-card h3 {
@@ -368,6 +377,11 @@ body {
   font-weight: 700;
   line-height: 1.3;
   color: #000000;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 31px;
 }
 
 .similar-card-brand,
@@ -476,9 +490,9 @@ body {
 }
 
 .premium-plan-card--highlight {
-  background: linear-gradient(180deg, #f97316 0%, #ef6b11 100%);
+  background: linear-gradient(180deg, #f68a35 0%, #ef6b11 100%);
   border: none;
-  box-shadow: 0 10px 24px rgba(249, 115, 22, 0.22);
+  box-shadow: 0 10px 24px rgba(249, 115, 22, 0.20);
 }
 
 .premium-badge {
@@ -621,4 +635,12 @@ body {
   background: #ffffff;
   color: #f97316;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.10);
+}
+
+.scan-btn:focus-visible,
+.premium-btn:focus-visible,
+.premium-plan-cta:focus-visible,
+.similar-card:focus-visible {
+  outline: 2px solid rgba(249, 115, 22, 0.35);
+  outline-offset: 2px;
 }
