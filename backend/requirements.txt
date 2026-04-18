@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+vaderSentiment
+nltk
+requests
+beautifulsoup4
+groq
+python-dotenv
