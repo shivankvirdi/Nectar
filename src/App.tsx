@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import './App.css'
-import PremiumScreen from './PremiumScreen'
 
 type Insight = {
   topic: string
@@ -34,7 +33,6 @@ export default function App() {
   const [currentUrl, setCurrentUrl] = useState('Loading...')
   const [backendStatus, setBackendStatus] = useState('Waiting for backend...')
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
-  const [view, setView] = useState<'home' | 'premium'>('home')
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
@@ -74,8 +72,6 @@ export default function App() {
     })
   }, [])
 
-  if (view === 'premium') return <PremiumScreen onBack={() => setView('home')} />
-  
   return (
     <div className="container">
       <div className="header">
@@ -83,9 +79,7 @@ export default function App() {
           <h2>Nectar</h2>
           <p className="subtitle">PRODUCT ANALYZER</p>
         </div>
-        <button className="premium" onClick={() => setView('premium')}>Go Premium</button>
       </div>
-      
 
       <div className="card">
         <h3>Overall Score</h3>

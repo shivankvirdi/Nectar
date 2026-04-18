@@ -1,9 +1,10 @@
 interface Props {
   usage: number
   onScan: () => void
+  onPremium: () => void
 }
 
-export default function HomeScreen({ usage, onScan }: Props) {
+export default function HomeScreen({ usage, onScan, onPremium }: Props) {
   const maxUsage = 2
   const percent = (usage / maxUsage) * 100
 
@@ -15,7 +16,7 @@ export default function HomeScreen({ usage, onScan }: Props) {
           <div className="logo"> Nectar</div>
           <div className="subtitle">PRODUCT ANALYZER</div>
         </div>
-        <button className="premium-btn">Go Premium</button>
+        <button className="premium-btn" onClick={onPremium}>Go Premium</button>
       </div>
 
       {/* USAGE */}
