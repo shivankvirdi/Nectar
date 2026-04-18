@@ -188,7 +188,7 @@ export default function App() {
             <img src="/icons/logo.png" alt="Nectar logo" className="brand-logo" />
             <div className="brand-block">
               <h1>Nectar</h1>
-              <p>SMART PRODUCT ANALYZER</p>
+              <p>AMAZON PRODUCT ANALYZER</p>
             </div>
           </div>
 

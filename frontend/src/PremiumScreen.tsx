@@ -14,166 +14,172 @@ const plans = [
       'Review Integrity score',
       'Brand Reputation score',
       'Similar product suggestions',
-      'One product at a time',
+      'One product scan at a time',
     ],
     highlight: false,
     cta: 'Current Plan',
   },
   {
     name: 'PRO',
-    price: '$59',
+    price: '$15.99',
     period: '/mo',
-    desc: 'For sellers & dropshippers',
+    desc: 'For e-commerce & dropshippers',
     features: [
-      '1,500 scans per month',
       'Everything in Free',
+      '1,500 scans per month',
       'AI-powered pro/con analysis',
       'Deep sentiment analysis',
       'Bulk analysis (up to 50 at once)',
       'Side-by-side product comparison',
-      'Search by keyword, not just URL',
+      'Search by keyword and URL',
     ],
     highlight: true,
-    cta: 'Get Pro',
+    cta: 'Upgrade to Pro',
   },
   {
     name: 'BUSINESS',
-    price: '$349',
+    price: '$99.99',
     period: '/mo',
     desc: 'For retailers & agencies',
     features: [
-      '20,000+ scans per month',
       'Everything in Pro',
+      '20,000+ scans per month',
       'Reputation trend forecasting',
       'Multi-platform analysis',
-      'Demographic & geo sentiment',
-      'Bulk analysis (up to 2,000)',
+      'Demographic & geographic sentiment',
+      'Bulk analysis (up to 2,000 at once)',
       'Custom white-label reports',
       'Analysis history database',
-      '$0.02 per scan over limit',
     ],
     highlight: false,
-    cta: 'Get Business',
+    cta: 'Upgrade to Business',
   },
 ]
 
 export default function PremiumScreen({ onBack }: Props) {
   return (
-    <div className="screen">
-
-      <div className="top-header">
+    <>
+      {/* Reuse the same sticky header as the home page */}
+      <header className="top-header">
         <div className="brand-row">
           <img src="/icons/logo.png" alt="Nectar logo" className="brand-logo" />
           <div className="brand-block">
             <h1>Nectar</h1>
-            <p>SMART PRODUCT ANALYZER</p>
+            <p>AMAZON PRODUCT ANALYZER</p>
           </div>
         </div>
         <button className="premium-btn" onClick={onBack}>← Back</button>
-      </div>
+      </header>
 
-      <div style={{ textAlign: 'center', margin: '12px 16px 16px' }}>
-        <p style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '0.05em' }}>
-          Choose Your Plan
-        </p>
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-          Unlock the full power of Nectar
-        </p>
-      </div>
+      {/* Scrollable content area — same as home page */}
+      <div className="content">
 
-      <div style={{ padding: '0 16px 16px' }}>
+        {/* Heading */}
+        <div style={{ textAlign: 'center', padding: '4px 0 8px' }}>
+          <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#202020', letterSpacing: '-0.01em' }}>
+            Choose Your Plan
+          </p>
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: '#78716c' }}>
+            Unlock the full power of Nectar
+          </p>
+        </div>
+
+        {/* Plan cards */}
         {plans.map((plan) => (
           <div
             key={plan.name}
+            className="section-card"
             style={{
-              background: plan.highlight ? 'var(--brand)' : 'var(--surface2)',
-              border: plan.highlight ? 'none' : '1px solid var(--border)',
-              borderRadius: 14,
-              padding: '14px 16px',
-              marginBottom: 10,
+              background: plan.highlight ? '#f97316' : '#f1f1ee',
+              border: plan.highlight ? 'none' : '1px solid #e0dfdb',
               position: 'relative',
             }}
           >
+            {/* POPULAR badge */}
             {plan.highlight && (
               <div style={{
                 position: 'absolute',
-                top: -10,
+                top: -11,
                 right: 14,
                 background: '#fff',
-                color: 'var(--brand)',
+                color: '#f97316',
                 fontSize: 9,
                 fontWeight: 800,
                 letterSpacing: '0.15em',
-                padding: '3px 8px',
+                padding: '3px 10px',
                 borderRadius: 999,
+                boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
               }}>
                 POPULAR
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            {/* Plan name + price row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
               <div>
                 <p style={{
+                  margin: 0,
                   fontSize: 11,
                   fontWeight: 800,
                   letterSpacing: '0.2em',
-                  color: plan.highlight ? '#fff' : 'var(--text-muted)',
+                  color: plan.highlight ? '#fff' : '#78716c',
                 }}>
                   {plan.name}
                 </p>
                 <p style={{
-                  fontSize: 10,
-                  color: plan.highlight ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)',
-                  marginTop: 2,
+                  margin: '3px 0 0',
+                  fontSize: 11,
+                  color: plan.highlight ? 'rgba(255,255,255,0.8)' : '#78716c',
                 }}>
                   {plan.desc}
                 </p>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: 22, fontWeight: 800, color: plan.highlight ? '#fff' : 'var(--text)' }}>
+                <span style={{ fontSize: 24, fontWeight: 800, color: plan.highlight ? '#fff' : '#1e1e1e' }}>
                   {plan.price}
                 </span>
-                <span style={{ fontSize: 10, color: plan.highlight ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)' }}>
+                <span style={{ fontSize: 11, color: plan.highlight ? 'rgba(255,255,255,0.75)' : '#78716c' }}>
                   {plan.period}
                 </span>
               </div>
             </div>
 
-            <div style={{ margin: '10px 0 12px' }}>
+            {/* Feature list */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
               {plan.features.map((f) => (
                 <p key={f} style={{
-                  fontSize: 11,
-                  color: plan.highlight ? 'rgba(255,255,255,0.9)' : 'var(--text)',
-                  marginBottom: 4,
+                  margin: 0,
+                  fontSize: 12,
+                  color: plan.highlight ? 'rgba(255,255,255,0.92)' : '#333',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 6,
+                  gap: 7,
                 }}>
-                  <span style={{ color: plan.highlight ? '#fff' : 'var(--brand)', fontSize: 10 }}>✦</span>
+                  <span style={{ color: plan.highlight ? '#fff' : '#f97316', fontSize: 10 }}>✦</span>
                   {f}
                 </p>
               ))}
             </div>
 
+            {/* CTA button */}
             <button style={{
               width: '100%',
-              padding: '9px',
-              borderRadius: 10,
-              border: plan.highlight ? 'none' : '1px solid var(--brand)',
-              background: plan.highlight ? 'rgba(0,0,0,0.2)' : 'transparent',
-              color: plan.highlight ? '#fff' : 'var(--brand)',
+              padding: '10px',
+              borderRadius: 12,
+              border: plan.highlight ? 'none' : '1px solid #f97316',
+              background: plan.highlight ? 'rgba(0,0,0,0.15)' : 'transparent',
+              color: plan.highlight ? '#fff' : '#f97316',
               fontWeight: 700,
-              fontSize: 11,
-              letterSpacing: '0.1em',
+              fontSize: 13,
+              letterSpacing: '0.04em',
               cursor: 'pointer',
-              fontFamily: 'var(--font-display)',
+              fontFamily: 'Epilogue, sans-serif',
             }}>
               {plan.cta}
             </button>
           </div>
         ))}
       </div>
-
-    </div>
+    </>
   )
 }

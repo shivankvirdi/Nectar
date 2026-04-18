@@ -1,22 +1,29 @@
 # brand_reputation.py
 
 import re
-import requests                                      # sends HTTP requests to Trustpilot
-import json                                          # parses the JSON blob embedded in Trustpilot's HTML
-import time                                          # polite delay between page requests
-from collections import Counter                      # counts word frequencies for commonKeywords
-from bs4 import BeautifulSoup                        # parses the HTML page structure
+import math
+import requests
+import json
+import time
+from collections import Counter
+from bs4 import BeautifulSoup
 import nltk
-nltk.download('vader_lexicon', quiet=True)
-nltk.download('stopwords', quiet=True)
+nltk.download('vader_lexicon',              quiet=True)
+nltk.download('stopwords',                  quiet=True)
+nltk.download('punkt',                      quiet=True)
+nltk.download('punkt_tab',                  quiet=True)
+nltk.download('wordnet',                    quiet=True)
+nltk.download('averaged_perceptron_tagger', quiet=True)
+
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from nltk.corpus import stopwords
+from nltk.tokenize import sent_tokenize
+from nltk.stem import WordNetLemmatizer
 
-sia = SentimentIntensityAnalyzer()                   # one shared VADER instance
+sia        = SentimentIntensityAnalyzer()
+lemmatizer = WordNetLemmatizer()
+STOP_WORDS = set(stopwords.words('english'))
 
-STOP_WORDS = set(stopwords.words('english'))         # common words to exclude from keyword counts
-
-# Browser-like headers so Trustpilot doesn't immediately block the request
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -26,56 +33,38 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
+
+# ─── Trustpilot helpers (unchanged) ──────────────────────────────────────────
+
 def normalize_brand(brand: str) -> str:
-    if not brand:
-        return ""
+    if not brand: return ""
     brand = brand.lower().strip()
     brand = re.sub(r"[^a-z0-9 ]", "", brand)
-    brand = re.sub(r"\s+", " ", brand)
-    return brand
-
+    return re.sub(r"\s+", " ", brand)
 
 def guess_domain(brand: str) -> str:
-    if not brand:
-        return ""
+    if not brand: return ""
     clean = re.sub(r"[^a-z0-9]", "", brand.lower())
     return f"{clean}.com"
 
-
 def get_trustpilot_candidates(brand: str):
-    """
-    Generates multiple ways Trustpilot might recognize a company.
-    """
-    return [
-        brand,
-        normalize_brand(brand),
-        brand.replace(" ", ""),
-        guess_domain(brand),
-    ]
+    return [brand, normalize_brand(brand), brand.replace(" ", ""), guess_domain(brand)]
 
 def find_trustpilot_slug(brand_name: str) -> str | None:
     brand_name = brand_name.strip()
     search_url = f"https://www.trustpilot.com/search?query={brand_name.replace(' ', '+')}"
-
     try:
         response = requests.get(search_url, headers=HEADERS, timeout=10)
-
         if response.status_code != 200:
             print(f"[Trustpilot] Search returned status {response.status_code}")
             return None
-
         soup = BeautifulSoup(response.text, "html.parser")
-
         next_data_tag = soup.find("script", id="__NEXT_DATA__")
         if not next_data_tag:
             print("[Trustpilot] __NEXT_DATA__ not found")
             return None
-
-        page_data = json.loads(next_data_tag.string)
-
-        # ✅ FIX: multiple fallback paths (Trustpilot changes structure often)
+        page_data  = json.loads(next_data_tag.string)
         page_props = page_data.get("props", {}).get("pageProps", {})
-
         business_units = (
             page_props.get("businessUnits")
             or page_props.get("businesses")
@@ -84,107 +73,66 @@ def find_trustpilot_slug(brand_name: str) -> str | None:
             or page_props.get("hits")
             or []
         )
-
-        # NEW FALLBACK: sometimes results are nested deeper
         if not business_units and isinstance(page_props.get("pageData"), dict):
             business_units = page_props["pageData"].get("businessUnits", [])
-
         if not business_units:
             print(f"[Trustpilot] No businesses found for '{brand_name}'")
             return None
-
-        first = None
-
-        for b in business_units:
-            name = (b.get("name") or "").lower()
-            if brand_name.lower() in name:
-                first = b
-                break
-
+        first = next((b for b in business_units if brand_name.lower() in (b.get("name") or "").lower()), None)
         if not first:
             first = business_units[0]
-
-        # 🔥 FIX: Trustpilot often uses "slug" OR "identifyingName"
         slug = (
             first.get("identifyingName")
             or first.get("slug")
             or first.get("name")
             or first.get("websiteUrl", "").replace("https://www.trustpilot.com/review/", "")
         )
-
         if slug:
             print(f"[Trustpilot] Matched slug: {slug}")
             return slug
-
         return None
-
     except Exception as e:
         print(f"[Trustpilot] Slug search error: {e}")
         return None
 
 def scrape_trustpilot_reviews(slug: str, max_reviews: int = 20) -> list:
-    """
-    Scrapes review data from a Trustpilot company page using the slug.
-    Fetches 2 pages (typically ~20 reviews) using the same __NEXT_DATA__ technique.
-    
-    Returns a list of dicts: {text, title, rating}
-    Returns an empty list if scraping fails.
-    """
     reviews = []
-
-    for page_num in range(1, 3):                        # pages 1 and 2
+    for page_num in range(1, 3):
         url = f"https://www.trustpilot.com/review/{slug}?page={page_num}"
-
         try:
             response = requests.get(url, headers=HEADERS, timeout=10)
-
             if response.status_code != 200:
                 print(f"[Trustpilot] Reviews page {page_num} returned {response.status_code}")
                 break
-
             soup = BeautifulSoup(response.text, "html.parser")
-
             next_data_tag = soup.find("script", id="__NEXT_DATA__")
             if not next_data_tag:
                 print(f"[Trustpilot] No __NEXT_DATA__ on reviews page {page_num}")
                 break
-
             page_data = json.loads(next_data_tag.string)
-
-            # Trustpilot stores reviews at props → pageProps → reviews
             page_reviews = (
-            page_data
-            .get("props", {})
-            .get("pageProps", {})
-            .get("reviews")
-            or page_data
-            .get("props", {})
-            .get("reviews")
-            or []
-        )
-
+                page_data.get("props", {}).get("pageProps", {}).get("reviews")
+                or page_data.get("props", {}).get("reviews")
+                or []
+            )
             for review in page_reviews:
                 text = review.get("text", "")
-                title = review.get("title", "")
-                rating = review.get("rating", 3)        # 1–5 star rating
-
-                if text:                                 # skip reviews with no written content
+                if text:
                     reviews.append({
-                        "text": text,
-                        "title": title,
-                        "rating": rating,
+                        "text":   text,
+                        "title":  review.get("title", ""),
+                        "rating": review.get("rating", 3),
                     })
-
-            time.sleep(1.5)                             # be polite — don't hammer the server
-
+            time.sleep(1.5)
         except Exception as e:
             print(f"[Trustpilot] Error on page {page_num}: {e}")
             break
-
         if len(reviews) >= max_reviews:
             break
-
     return reviews[:max_reviews]
+
+
+# ─── Keyword config ────────────────────────────────────────────────────────────
 
 BRAND_NOISE_WORDS = {
     "also", "like", "just", "really", "very", "good", "great", "nice", "love",
@@ -193,64 +141,200 @@ BRAND_NOISE_WORDS = {
     "ever", "back", "because", "dont", "didnt", "this", "that", "with", "have",
     "been", "than", "them", "they", "from", "protein", "sugar", "taste",
     "chocolate", "drink", "banana", "cream", "tried", "whilst", "available",
+    "getting", "going", "think", "know", "feel", "looks", "seems", "look",
+    "give", "need", "want", "does", "work", "works", "worked", "will", "shall",
+    "sure", "your", "their", "about", "there", "here", "when", "then",
+    "these", "those", "some", "more", "less", "over", "same", "such",
 }
 
+BRAND_BOOST = {
+    "shipping", "delivery", "delivered", "arrived", "packaging", "packaged",
+    "support", "service", "response", "responsive", "helpful", "unhelpful",
+    "refund", "return", "returned", "exchange", "resolved", "unresolved",
+    "communication", "contacted", "ignored", "delayed", "fast", "slow",
+    "damaged", "broken", "missing", "wrong", "correct", "accurate",
+    "trustworthy", "reliable", "unreliable", "scam", "legitimate", "fake",
+    "customer", "experience", "ordered", "order", "received", "waiting",
+}
+
+# Meaningful two-word phrases for brand/service reviews.
+BRAND_BIGRAMS = {
+    "customer service", "customer support", "customer care",
+    "fast delivery",    "fast shipping",    "slow delivery",   "delayed delivery",
+    "never arrived",    "arrived damaged",  "wrong item",      "missing item",
+    "easy return",      "return process",   "refused refund",  "full refund",
+    "highly recommend", "would recommend",  "not recommend",
+    "great experience", "terrible experience", "awful experience",
+    "good communication", "no response",    "quick response",
+    "well packaged",    "poorly packaged",  "damaged packaging",
+    "money back",       "waste money",      "good value",      "great value",
+    "never again",      "will return",      "repeat customer",
+    "exceeded expectations", "below expectations",
+    "not worth",        "not good",         "not great",
+}
+
+NEGATION_WORDS = {
+    "not", "no", "never", "cant", "cannot", "wont", "dont",
+    "doesnt", "didnt", "isnt", "wasnt", "barely", "hardly",
+    "scarcely", "nothing", "neither",
+}
+
+MIN_DOC_FREQ = 2
+
+
+# ─── Extraction helpers ────────────────────────────────────────────────────────
+
+def _lemma(word: str) -> str:
+    return lemmatizer.lemmatize(word.lower())
+
+
+def _sentence_scores_for_term(term: str, reviews: list, field: str) -> list[float]:
+    """
+    Score only the sentences containing `term`.
+
+    Why: "Delivery was great. Customer support never responded." scores positive
+    overall. Without sentence-level scoring "responded" and "never" both look
+    positive. With it, the negative sentence is isolated and scored correctly.
+    """
+    scores = []
+    pat = re.compile(re.escape(term), re.IGNORECASE)
+    for review in reviews:
+        text = review.get(field, "") or ""
+        try:
+            sentences = sent_tokenize(text)
+        except Exception:
+            sentences = text.split(".")
+        for sent in sentences:
+            if pat.search(sent):
+                scores.append(sia.polarity_scores(sent)["compound"])
+    return scores
+
+
+def _negation_bigrams(text: str) -> list[str]:
+    """
+    Detect 'not responsive', 'never delivered', 'cant return' patterns.
+    Returns 'not <lemma>' strings — injected as forced-negative keywords.
+    """
+    tokens = re.findall(r"[a-z']+", text.lower())
+    pairs  = []
+    for i, tok in enumerate(tokens[:-1]):
+        if tok.replace("'", "") in NEGATION_WORDS:
+            nxt = tokens[i + 1]
+            if len(nxt) >= 3 and nxt not in STOP_WORDS and nxt not in BRAND_NOISE_WORDS:
+                pairs.append(f"not {_lemma(nxt)}")
+    return pairs
+
+
+# ─── Main keyword extraction ───────────────────────────────────────────────────
+
 def extract_common_keywords(reviews: list, top_n: int = 10) -> list:
-    word_counts = Counter()
-    word_sentiments: dict[str, list[float]] = {}
+    """
+    Extracts the most meaningful brand-experience keywords from Trustpilot reviews.
+
+    Improvements over the original:
+    1. Lemmatization      — "returned"/"returning"/"return" count as one term.
+    2. Negation detection — "never responded", "cant return" become explicit
+                            negative keywords, not invisible noise.
+    3. Sentence-level     — each keyword's sentiment is scored per sentence,
+       sentiment            not the whole (possibly mixed) review.
+    4. IDF weighting      — ubiquitous words like "order"/"delivery" that appear
+                            in every review are penalised; rare problem words rise.
+    5. Min doc-frequency  — one-off mentions (≤1 review) are discarded.
+    6. Curated bigrams    — "customer service", "no response", "refused refund"
+                            surface as phrases instead of split single words.
+    """
+    total = len(reviews)
+    if total == 0:
+        return []
+
+    word_counts:     Counter = Counter()
+    word_doc_freq:   Counter = Counter()
+    bigram_counts:   Counter = Counter()
+    bigram_doc_freq: Counter = Counter()
+    negation_counts: Counter = Counter()
 
     for review in reviews:
-        text = review.get("text", "")
+        text = review.get("text", "") or ""
         if not text:
             continue
+        text_lower = text.lower()
 
-        compound = sia.polarity_scores(text)["compound"]
-        words = re.findall(r"[a-z]{4,}", text.lower())
-        unique_words = set(words)
+        # ── lemmatized unigrams ────────────────────────────────────────────
+        raw_words   = re.findall(r"[a-z]{4,}", text_lower)
+        seen_lemmas: set[str] = set()
+        for w in raw_words:
+            lemma = _lemma(w)
+            if lemma not in STOP_WORDS and lemma not in BRAND_NOISE_WORDS:
+                word_counts[lemma] += 1
+                if lemma not in seen_lemmas:
+                    word_doc_freq[lemma] += 1
+                    seen_lemmas.add(lemma)
 
-        for word in unique_words:
-            if word not in STOP_WORDS and word not in BRAND_NOISE_WORDS:
-                word_counts[word] += 1
-                word_sentiments.setdefault(word, []).append(compound)
+        # ── curated bigrams ────────────────────────────────────────────────
+        seen_bg: set[str] = set()
+        for bg in BRAND_BIGRAMS:
+            if bg in text_lower:
+                bigram_counts[bg] += 1
+                if bg not in seen_bg:
+                    bigram_doc_freq[bg] += 1
+                    seen_bg.add(bg)
 
-    # Boost words that describe brand experience
-    BRAND_BOOST = {
-        "shipping", "delivery", "delivered", "arrived", "packaging", "packaged",
-        "support", "service", "response", "responsive", "helpful", "unhelpful",
-        "refund", "return", "returned", "exchange", "resolved", "unresolved",
-        "communication", "contacted", "ignored", "delayed", "fast", "slow",
-        "damaged", "broken", "missing", "wrong", "correct", "accurate",
-        "trustworthy", "reliable", "unreliable", "scam", "legitimate", "fake",
-        "customer", "experience", "ordered", "order", "received", "waiting",
-    }
+        # ── negation bigrams ───────────────────────────────────────────────
+        for neg in _negation_bigrams(text):
+            negation_counts[neg] += 1
 
-    boosted_counts = Counter()
-    for word, count in word_counts.items():
-        boosted_counts[word] = count * 2 if word in BRAND_BOOST else count
+    # ── TF-IDF-style scoring ──────────────────────────────────────────────
+    def idf(df: int) -> float:
+        return math.log(total / (1 + df)) + 1.0
 
+    scored: dict[str, float] = {}
+
+    for lemma, count in word_counts.items():
+        df = word_doc_freq[lemma]
+        if df < MIN_DOC_FREQ:
+            continue
+        boost = 2.0 if lemma in BRAND_BOOST else 1.0
+        scored[lemma] = count * idf(df) * boost
+
+    for bg, count in bigram_counts.items():
+        df = bigram_doc_freq[bg]
+        if df < MIN_DOC_FREQ:
+            continue
+        scored[bg] = count * idf(df) * 3.0   # bigrams: 3× weight
+
+    for neg, count in negation_counts.items():
+        if count >= MIN_DOC_FREQ:
+            scored[neg] = count * 4.0         # negations: 4× weight (high signal)
+
+    top_terms = sorted(scored, key=scored.__getitem__, reverse=True)[:top_n]
+
+    # ── sentence-level sentiment for each top term ────────────────────────
     keywords = []
-    for word, _ in boosted_counts.most_common(top_n):
-        count = word_counts[word]
-        scores = word_sentiments.get(word, [])
-        avg = sum(scores) / len(scores) if scores else 0
+    for term in top_terms:
+        is_negation = term.startswith("not ") and " " in term
+        is_bigram   = " " in term
 
-        sentiment = "positive" if avg >= 0.05 else "negative" if avg <= -0.05 else "neutral"
-        keywords.append({"word": word, "count": count, "sentiment": sentiment})
+        if is_bigram:
+            raw_count = negation_counts[term] if is_negation else bigram_counts[term]
+        else:
+            raw_count = word_counts[term]
+
+        if is_negation:
+            sentiment = "negative"
+        else:
+            sscores = _sentence_scores_for_term(term, reviews, field="text")
+            avg     = sum(sscores) / len(sscores) if sscores else 0.0
+            sentiment = "positive" if avg >= 0.05 else "negative" if avg <= -0.05 else "neutral"
+
+        keywords.append({"word": term, "count": raw_count, "sentiment": sentiment})
 
     return keywords
 
 
+# ─── Reputation analysis (unchanged logic) ────────────────────────────────────
+
 def build_reputation_insights(reviews: list, brand_name: str) -> dict:
-    """
-    Runs VADER on all Trustpilot reviews and builds:
-      - A headline compound score (-1.0 to +1.0)
-      - A human-readable overall label
-      - 3 insight bullet points for the Nectar UI
-      - A percentage score for the UI bar display (0–100)
-      - commonKeywords: top words from reviews with sentiment label
-    """
     if not reviews:
-        # Return a neutral fallback so the pipeline doesn't crash
         return {
             "brand": brand_name,
             "reputation_score_pct": None,
@@ -266,123 +350,86 @@ def build_reputation_insights(reviews: list, brand_name: str) -> dict:
 
     compound_scores = []
     pos_count = neg_count = neu_count = 0
-
-    # Keyword lists for specific insight topics — same approach as reddit_reputation.py
     support_texts = []
     shipping_texts = []
-    quality_texts = []
+    quality_texts  = []
 
     for review in reviews:
-        text = review["text"]
+        text       = review["text"]
         text_lower = text.lower()
-
-        compound = sia.polarity_scores(text)["compound"]   # VADER score: -1 to +1
+        compound   = sia.polarity_scores(text)["compound"]
         compound_scores.append(compound)
 
-        # Tally sentiment labels
-        if compound >= 0.05:
-            pos_count += 1
-        elif compound <= -0.05:
-            neg_count += 1
-        else:
-            neu_count += 1
+        if compound >= 0.05:   pos_count += 1
+        elif compound <= -0.05: neg_count += 1
+        else:                   neu_count += 1
 
-        # Route this review text into topic buckets based on keywords
-        # Each bucket is later scored separately for the 3 bullet points
         if any(kw in text_lower for kw in ["support", "service", "help", "response", "refund", "return", "agent"]):
             support_texts.append(compound)
-
         if any(kw in text_lower for kw in ["shipping", "delivery", "arrived", "package", "delayed", "late", "fast", "slow"]):
             shipping_texts.append(compound)
-
         if any(kw in text_lower for kw in ["quality", "durable", "broke", "build", "material", "lasted", "cheap", "premium"]):
             quality_texts.append(compound)
 
-    total = len(compound_scores)
-    avg_compound = sum(compound_scores) / total if total > 0 else 0            # overall average: -1.0 to +1.0
+    total        = len(compound_scores)
+    avg_compound = sum(compound_scores) / total if total > 0 else 0
 
     def scores_to_status(scores: list) -> str:
-        """
-        Given a list of compound scores for a topic,
-        returns 'Positive', 'Caution', or 'Neutral' for the UI badge.
-        Falls back to 'Neutral' if no reviews mentioned this topic.
-        """
-        if not scores:
-            return "Neutral"                               # not enough data on this topic
+        if not scores: return "Neutral"
         mean = sum(scores) / len(scores)
-        if mean >= 0.05:
-            return "Positive"
-        elif mean <= -0.05:
-            return "Caution"
-        else:
-            return "Neutral"
+        if mean >= 0.05:   return "Positive"
+        if mean <= -0.05:  return "Caution"
+        return "Neutral"
 
-    # Build the 3 bullet points — maps directly to Nectar's Reputation Insights panel
     insights = [
         {"topic": "Customer Support",    "status": scores_to_status(support_texts)},
         {"topic": "Shipping & Delivery", "status": scores_to_status(shipping_texts)},
         {"topic": "Build Quality",       "status": scores_to_status(quality_texts)},
     ]
 
-    # Convert compound score (-1 to +1) → 0–100 percentage for the UI progress bar
-    avg_rating = sum(review.get("rating", 3) for review in reviews) / total if total > 0 else 3
-
-    sentiment_score = ((avg_compound + 1) / 2) * 100
-    rating_score = (avg_rating / 5) * 100
-
+    avg_rating          = sum(r.get("rating", 3) for r in reviews) / total if total > 0 else 3
+    sentiment_score     = ((avg_compound + 1) / 2) * 100
+    rating_score        = (avg_rating / 5) * 100
     reputation_score_pct = round((sentiment_score * 0.45) + (rating_score * 0.55)) if total > 0 else None
 
-    # Overall label shown under the score
-    if reputation_score_pct >= 80:
-        overall_label = "Strong overall brand reputation on Trustpilot."
-    elif reputation_score_pct >= 65:
-        overall_label = "Mostly positive brand reputation with some concerns."
-    elif reputation_score_pct >= 50:
-        overall_label = "Mixed brand reputation on Trustpilot."
-    else:
-        overall_label = "Weak brand reputation based on recent Trustpilot reviews."
+    if   reputation_score_pct >= 80: overall_label = "Strong overall brand reputation on Trustpilot."
+    elif reputation_score_pct >= 65: overall_label = "Mostly positive brand reputation with some concerns."
+    elif reputation_score_pct >= 50: overall_label = "Mixed brand reputation on Trustpilot."
+    else:                            overall_label = "Weak brand reputation based on recent Trustpilot reviews."
 
     return {
-        "brand": brand_name,
-        "reputation_score_pct": reputation_score_pct,      # e.g. 72 → shown as score in UI
-        "overall_label": overall_label,
-        "avg_compound": round(avg_compound, 3),
-        "positive_pct": round((pos_count / total) * 100) if total > 0 else 0,
-        "negative_pct": round((neg_count / total) * 100) if total > 0 else 0,
-        "reviews_analyzed": total,
-        "insights": insights,                               # 3 bullet points for the UI
-        "commonKeywords": extract_common_keywords(reviews), # top words driving the score
+        "brand":                brand_name,
+        "reputation_score_pct": reputation_score_pct,
+        "overall_label":        overall_label,
+        "avg_compound":         round(avg_compound, 3),
+        "positive_pct":         round((pos_count / total) * 100) if total > 0 else 0,
+        "negative_pct":         round((neg_count / total) * 100) if total > 0 else 0,
+        "reviews_analyzed":     total,
+        "insights":             insights,
+        "commonKeywords":       extract_common_keywords(reviews),
     }
 
 
 def get_brand_reputation(brand_name: str) -> dict:
-    """
-    Master function — the one your FastAPI /analyze endpoint calls.
-    Takes brand_name (now auto-extracted from Canopy's 'brand' field),
-    finds the Trustpilot page, scrapes reviews, runs VADER, returns report.
-    """
     print(f"\n[Reputation] Analyzing brand: '{brand_name}'")
-
-    slug = find_trustpilot_slug(brand_name)             # step 1: find the company's Trustpilot URL
-
+    slug = find_trustpilot_slug(brand_name)
     if not slug:
         print(f"[Reputation] No Trustpilot slug found — returning neutral fallback")
         return {
-            "brand": brand_name,
+            "brand":                brand_name,
             "reputation_score_pct": None,
-            "overall_label": "Trustpilot data unavailable — fallback required",
-            "avg_compound": None,
-            "positive_pct": None,
-            "negative_pct": None,
-            "reviews_analyzed": 0,
+            "overall_label":        "Trustpilot data unavailable — fallback required",
+            "avg_compound":         None,
+            "positive_pct":         None,
+            "negative_pct":         None,
+            "reviews_analyzed":     0,
             "insights": [
-                {"topic": "Customer Support", "status": "Unknown"},
+                {"topic": "Customer Support",    "status": "Unknown"},
                 {"topic": "Shipping & Delivery", "status": "Unknown"},
-                {"topic": "Build Quality", "status": "Unknown"},
+                {"topic": "Build Quality",       "status": "Unknown"},
             ],
             "commonKeywords": [],
-            "source": "no_trustpilot_data"
-        } 
-
-    reviews = scrape_trustpilot_reviews(slug)           # step 2: scrape up to 20 reviews
-    return build_reputation_insights(reviews, brand_name)  # step 3: VADER + build report
+            "source": "no_trustpilot_data",
+        }
+    reviews = scrape_trustpilot_reviews(slug)
+    return build_reputation_insights(reviews, brand_name)
