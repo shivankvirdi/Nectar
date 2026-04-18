@@ -1,22 +1,21 @@
 Nectar is a product-analyzer Chrome extension that provides in-depth information on products’ price points, history, quality, brand reputation, and more, recommending the best option. Our mission is to reduce shopper’s stress when buying products and providing a more educated shopping experience.
 
 ## Setting up environment:
-```
+```bash
 git clone https://github.com/aagarw56/GDGC-Ballers.git
-cd GDGC-Ballers
-cd backend
+cd GDGC-Ballers/backend
 python -m venv .venv
 .venv/Scripts/activate
 pip install -r requirements.txt
 ```
 Also install node.js (http://nodejs.org/en/download) and add to PATH.
-## Create .env file in root directiry and add/fill this code:
-```
+## Create .env file in root directory and add/fill this code:
+```bash
 CANOPY_API_KEY="your_api_key_here"
 GROQ_API_KEY="your_api_key_here"
 ```
 ## How to run:
-```
+```bash
 cd frontend
 npm install
 npm run build #sets up frontend
