@@ -12,7 +12,7 @@ Also install node.js (http://nodejs.org/en/download) and add to PATH.
 ## Create .env file in root directory and add/fill this code:
 ```bash
 CANOPY_API_KEY="your_api_key_here"
-GROQ_API_KEY="your_api_key_here"
+GEMINI_API_KEY="your_api_key_here"
 ```
 ## How to run:
 ```bash
