@@ -31,10 +31,11 @@ npm run build
 4. Select GDGC-Ballers/frontend/dist
 
 ## Deploying Backend Server
+Use hosted backend already deployed on Render -- no setup required.  
+### Optional
 Run this in terminal to run locally:
 ```bash
 uvicorn backend.main:app --reload
 ```
-Or use hosted backend already deployed on Render -- no setup required.
 _____________________________________________________________________________________________________________________________________________________
 Co-developed by Shivank Virdi, Iyanna Arches, Jaycob Pakingan, Aanya Agarwal, & Kaylana Chaun. We hope you enjoy using our extension!
