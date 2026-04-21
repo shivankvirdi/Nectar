@@ -6,7 +6,7 @@ git clone https://github.com/aagarw56/GDGC-Ballers.git
 cd GDGC-Ballers/backend
 python -m venv .venv
 .venv/Scripts/activate
-pip install -r backend/requirements.txt
+pip install -r requirements.txt
 ```
 Also install node.js (http://nodejs.org/en/download) and add to PATH.
 ## Create .env file in root directory and add/fill this code:
