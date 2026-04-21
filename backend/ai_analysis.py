@@ -157,3 +157,147 @@ def _fallback(overall_score: int) -> dict:
         "verdict": "Analysis based on scores only — not enough review text available.",
         "recommendation": rec,
     }
+
+def explain_score_with_ai(metric_name: str, analysis: dict) -> dict:
+    title = analysis.get("title") or "Unknown product"
+    overall_score = analysis.get("overallScore")
+
+    review_integrity = analysis.get("reviewIntegrity") or {}
+    brand_reputation = analysis.get("brandReputation") or {}
+    raw = analysis.get("raw") or {}
+    reviews = raw.get("reviews") or []
+
+    review_snippets = "\n".join(
+        f"- [{r.get('rating', '?')}★] {(r.get('body') or '')[:180]}"
+        for r in reviews[:8]
+        if (r.get("body") or "").strip()
+    )
+
+    if metric_name == "review_integrity":
+        metric_title = "Review Integrity"
+        score = review_integrity.get("score")
+        details = {
+            "label": review_integrity.get("label"),
+            "verified_purchase_ratio": review_integrity.get("verifiedPurchaseRatio"),
+            "sentiment_consistency_ratio": review_integrity.get("sentimentConsistencyRatio"),
+            "flags": review_integrity.get("flags", {}),
+            "common_keywords": review_integrity.get("commonKeywords", []),
+        }
+        instructions = "Focus on verified purchase ratio, sentiment consistency, suspicious patterns, and review keyword trends."
+    elif metric_name == "brand_reputation":
+        metric_title = "Brand Reputation"
+        score = brand_reputation.get("score")
+        details = {
+            "label": brand_reputation.get("label"),
+            "reviews_analyzed": brand_reputation.get("reviewsAnalyzed"),
+            "insights": brand_reputation.get("insights", []),
+            "common_keywords": brand_reputation.get("commonKeywords", []),
+        }
+        instructions = "Focus on Trustpilot-style brand sentiment, the insight categories, and recurring positive or negative themes in the brand keywords."
+    else:
+        return {"answer": "Unknown score type."}
+
+    prompt = f"""You are explaining a product analysis score to a shopper.
+
+Product: {title}
+Overall Score: {overall_score}/100
+Metric: {metric_title}
+Metric Score: {score}/100
+
+Metric details:
+{json.dumps(details, indent=2)}
+
+Amazon review snippets (if available):
+{review_snippets or 'No review snippets available.'}
+
+Instructions:
+- Explain why this score has this value in 3 to 5 short sentences
+- Use only the provided evidence
+- Mention the biggest drivers of the score
+- Do not invent facts
+- Keep the tone clear and shopper-friendly
+- End with one brief takeaway sentence
+- {instructions}
+
+Return JSON only in this exact shape:
+{{
+  "answer": "string"
+}}
+"""
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "answer": {"type": "string"},
+        },
+        "required": ["answer"],
+    }
+
+    try:
+        print(f"[AI Explain] Calling Gemini for {metric_name}...")
+
+        models_to_try = [
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+        ]
+
+        for model_name in models_to_try:
+            for attempt in range(3):
+                try:
+                    print(f"[AI Explain] Trying {model_name} (attempt {attempt + 1})")
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            temperature=0.2,
+                            response_mime_type="application/json",
+                            response_json_schema=schema,
+                        ),
+                    )
+
+                    raw_text = (response.text or "").strip()
+                    print(f"[AI Explain] ✅ Gemini responded: {raw_text[:300]}")
+                    result = json.loads(raw_text)
+                    answer = (result.get("answer") or "").strip()
+                    if answer:
+                        return {"answer": answer}
+                except Exception as e:
+                    print(f"[AI Explain] ⚠️ {model_name} failed: {e}")
+                    time.sleep(1.5 * (attempt + 1))
+
+        return {"answer": _score_explainer_fallback(metric_name, analysis)}
+
+    except Exception as e:
+        print(f"[AI Explain] ❌ FINAL EXCEPTION: {e}")
+        return {"answer": _score_explainer_fallback(metric_name, analysis)}
+
+
+def _score_explainer_fallback(metric_name: str, analysis: dict) -> str:
+    if metric_name == "review_integrity":
+        ri = analysis.get("reviewIntegrity") or {}
+        score = ri.get("score", "N/A")
+        verified = ri.get("verifiedPurchaseRatio", "N/A")
+        consistency = ri.get("sentimentConsistencyRatio", "N/A")
+        flags = ", ".join((ri.get("flags") or {}).keys()) or "none"
+        return (
+            f"The review integrity score is {score} because it mainly depends on verified purchase ratio "
+            f"({verified}) and sentiment consistency ({consistency}). "
+            f"The current label reflects how often written review tone matches the star ratings. "
+            f"Detected warning flags: {flags}."
+        )
+
+    br = analysis.get("brandReputation") or {}
+    score = br.get("score", "N/A")
+    reviews_analyzed = br.get("reviewsAnalyzed", "N/A")
+    insight_bits = []
+    for insight in (br.get("insights") or [])[:3]:
+        topic = insight.get("topic")
+        status = insight.get("status")
+        if topic and status:
+            insight_bits.append(f"{topic}: {status}")
+    insight_text = "; ".join(insight_bits) or "limited insight data available"
+    return (
+        f"The brand reputation score is {score} based on external brand sentiment signals across {reviews_analyzed} reviews. "
+        f"The strongest drivers shown here are {insight_text}. "
+        f"The label summarizes whether the broader brand feedback looks strong, mixed, or weak overall."
+    )

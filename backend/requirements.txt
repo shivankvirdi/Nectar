@@ -4,5 +4,5 @@ vaderSentiment
 nltk
 requests
 beautifulsoup4
-groq
+google-genai
 python-dotenv

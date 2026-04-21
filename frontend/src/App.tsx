@@ -10,6 +10,12 @@ type Insight = {
   status: string
 }
 
+type Keyword = {
+  word: string
+  count: number
+  sentiment: 'positive' | 'negative' | 'neutral'
+}
+
 type Analysis = {
   asin?: string
   productKeyword?: string
@@ -24,22 +30,15 @@ type Analysis = {
     label?: string
     verifiedPurchaseRatio?: number
     sentimentConsistencyRatio?: number
-    commonKeywords?: {
-      word: string
-      count: number
-      sentiment: "positive" | "negative" | "neutral"
-    }[]
+    flags?: Record<string, boolean>
+    commonKeywords?: Keyword[]
   }
   brandReputation?: {
     score?: number
     label?: string
     insights?: Insight[]
     reviewsAnalyzed?: number
-    commonKeywords?: {
-      word: string
-      count: number
-      sentiment: "positive" | "negative" | "neutral"
-    }[]
+    commonKeywords?: Keyword[]
   }
   similarProducts?: {
     title?: string
@@ -57,6 +56,12 @@ type Analysis = {
     cons?: string[]
     verdict?: string
     recommendation?: 'BUY' | 'COMPARE' | 'SKIP'
+  }
+  raw?: {
+    reviews?: {
+      rating?: number
+      body?: string
+    }[]
   }
 }
 
@@ -170,6 +175,68 @@ function KeywordPills({
   )
 }
 
+function ScoreExplainer({
+  metric,
+  analysis,
+}: {
+  metric: 'review_integrity' | 'brand_reputation'
+  analysis: Analysis | null
+}) {
+  const [loading, setLoading] = useState(false)
+  const [answer, setAnswer] = useState('')
+  const [error, setError] = useState('')
+
+  const handleExplain = async () => {
+    if (!analysis) return
+
+    try {
+      setLoading(true)
+      setError('')
+      const response = await fetch(`${API_BASE}/explain-score`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ metric, analysis }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        const message = typeof data.detail === 'string' ? data.detail : 'Could not explain this score.'
+        setError(message)
+        return
+      }
+
+      setAnswer(data.answer ?? 'No explanation returned.')
+    } catch (err) {
+      console.error('Explain score failed:', err)
+      setError('Could not explain this score right now.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="score-explainer">
+      <button
+        className="why-score-btn"
+        onClick={handleExplain}
+        disabled={loading || !analysis}
+      >
+        {loading ? 'Explaining...' : 'Why this score'}
+      </button>
+
+      {error ? <p className="body-text status-error explain-text">{error}</p> : null}
+      {answer ? (
+        <div className="explain-box">
+          <p className="body-text explain-text">{answer}</p>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function VerdictCard({ ai }: { ai: NonNullable<Analysis['aiAnalysis']> }) {
   const rec = ai.recommendation ?? 'COMPARE'
 
@@ -182,7 +249,6 @@ function VerdictCard({ ai }: { ai: NonNullable<Analysis['aiAnalysis']> }) {
 
   return (
     <section className="section-card">
-      {/* Recommendation badge */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <h3 style={{ margin: 0 }}>AI Analysis</h3>
         <span style={{
@@ -198,7 +264,6 @@ function VerdictCard({ ai }: { ai: NonNullable<Analysis['aiAnalysis']> }) {
         </span>
       </div>
 
-      {/* Verdict sentence */}
       <p style={{
         margin: '0 0 14px',
         fontSize: 13,
@@ -212,7 +277,6 @@ function VerdictCard({ ai }: { ai: NonNullable<Analysis['aiAnalysis']> }) {
         {ai.verdict}
       </p>
 
-      {/* Pros + Cons side by side */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <div>
           <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 700, color: '#15803d', letterSpacing: '0.08em' }}>
@@ -417,6 +481,8 @@ export default function App() {
                     emptyMessage="No keywords found"
                   />
                 </div>
+
+                <ScoreExplainer metric="review_integrity" analysis={analysis} />
               </SectionCard>
 
               <SectionCard title="Brand Reputation">
@@ -450,11 +516,14 @@ export default function App() {
                 ) : (
                   <p className="body-text muted">No brand insights yet.</p>
                 )}
+
                 <p className="keywords-label"><strong>Top Keywords:</strong></p>
                 <KeywordPills
                   keywords={analysis?.brandReputation?.commonKeywords}
                   emptyMessage="No keywords found"
                 />
+
+                <ScoreExplainer metric="brand_reputation" analysis={analysis} />
               </SectionCard>
 
               <SectionCard title="Similar Products">

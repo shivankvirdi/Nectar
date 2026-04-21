@@ -644,3 +644,44 @@ body {
   outline: 2px solid rgba(249, 115, 22, 0.35);
   outline-offset: 2px;
 }
+
+.score-explainer {
+  margin-top: 12px;
+}
+
+.why-score-btn {
+  width: 100%;
+  border: 1px solid #f97316;
+  background: #fff7ed;
+  color: #ea580c;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.why-score-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: #f97316;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.18);
+}
+
+.why-score-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.explain-box {
+  margin-top: 10px;
+  background: #fffaf5;
+  border: 1px solid #f3dfcf;
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+
+.explain-text {
+  margin: 0;
+}
