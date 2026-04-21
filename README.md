@@ -14,7 +14,7 @@ python -m venv .venv
 source .venv/bin/activate # Mac/Linux
 ```
 ## Create .env in ROOT directory:
-```bash
+```
 CANOPY_API_KEY="your_api_key_here"
 GEMINI_API_KEY="your_api_key_here"
 ```
@@ -32,9 +32,16 @@ npm run build
 
 ## Deploying Backend Server
 Use hosted backend already deployed on Render -- no setup required.  
-### Optional
-Run this in terminal to run locally:
+### Deploy locally (optional)
+Change frontend.env.production url to:
+```
+VITE_API_URL=http://127.0.0.1:8000
+```
+Then run this in terminal:
 ```bash
+cd frontend
+npm run build
+cd..
 uvicorn backend.main:app --reload
 ```
 _____________________________________________________________________________________________________________________________________________________
