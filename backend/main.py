@@ -1,5 +1,5 @@
 from typing import Any
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -44,3 +44,10 @@ async def explain_score(payload: ExplainScorePayload):
         return {"ok": True, **answer}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    print(f"[REQUEST] {request.method} {request.url}")
+    response = await call_next(request)
+    print(f"[RESPONSE] Status: {response.status_code}")
+    return response
