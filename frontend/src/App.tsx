@@ -8,6 +8,117 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 type Insight = { topic: string; status: string }
 type Keyword = { word: string; count: number; sentiment: 'positive' | 'negative' | 'neutral' }
 
+type ScanRecord = {
+  id: string
+  scannedAt: string
+  url: string
+  analysis: Analysis
+}
+
+const LAST_SCAN_KEY = 'nectar_last_scan'
+const SCAN_HISTORY_KEY = 'nectar_scan_history'
+const MAX_SCAN_HISTORY = 12
+
+function getNumericPrice(price?: string | number | null): number | null {
+  if (price === null || price === undefined) return null
+  if (typeof price === 'number') return Number.isFinite(price) ? price : null
+
+  const cleaned = String(price).replace(/[^0-9.]/g, '')
+  const parsed = Number(cleaned)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function formatPriceDifference(diff: number): string {
+  const abs = Math.abs(diff).toFixed(2)
+  if (diff === 0) return '$0.00'
+  return diff > 0 ? `+$${abs}` : `-$${abs}`
+}
+
+function compareProductAgainstCurrent(current: Analysis | null, product?: SimilarProduct) {
+  const currentPrice = getNumericPrice(current?.price)
+  const otherPrice = getNumericPrice(product?.price)
+
+  const currentRating = Number(current?.rating ?? NaN)
+  const otherRating = Number(product?.rating ?? NaN)
+
+  const hasCurrentRating = Number.isFinite(currentRating)
+  const hasOtherRating = Number.isFinite(otherRating)
+
+  const priceDiff =
+    currentPrice !== null && otherPrice !== null
+      ? otherPrice - currentPrice
+      : null
+
+  let tag: 'BETTER' | 'SIMILAR' | 'WORSE' = 'SIMILAR'
+
+  let score = 0
+
+  if (priceDiff !== null) {
+    if (priceDiff <= -12) score += 1
+    if (priceDiff >= 12) score -= 1
+  }
+
+  if (hasCurrentRating && hasOtherRating) {
+    if (otherRating >= currentRating + 0.4) score += 1
+    if (otherRating <= currentRating - 0.4) score -= 1
+  }
+
+  if (score >= 1) tag = 'BETTER'
+  else if (score <= -1) tag = 'WORSE'
+  else tag = 'SIMILAR'
+
+  return {
+    tag,
+    priceDiff,
+  }
+}
+
+function getTagClassName(tag: 'BETTER' | 'SIMILAR' | 'WORSE') {
+  if (tag === 'BETTER') return 'comparison-badge comparison-badge--better'
+  if (tag === 'WORSE') return 'comparison-badge comparison-badge--worse'
+  return 'comparison-badge comparison-badge--similar'
+}
+
+function saveLastScan(record: ScanRecord) {
+  chrome.storage.local.set({ [LAST_SCAN_KEY]: record })
+}
+
+function loadLastScan(): Promise<ScanRecord | null> {
+  return new Promise((resolve) => {
+    chrome.storage.local.get([LAST_SCAN_KEY], (result) => {
+      resolve((result?.[LAST_SCAN_KEY] as ScanRecord) ?? null)
+    })
+  })
+}
+
+function saveScanToHistory(record: ScanRecord) {
+  chrome.storage.local.get([SCAN_HISTORY_KEY], (result) => {
+    const existing = (result?.[SCAN_HISTORY_KEY] as ScanRecord[]) ?? []
+    const next = [record, ...existing].slice(0, MAX_SCAN_HISTORY)
+    chrome.storage.local.set({ [SCAN_HISTORY_KEY]: next })
+  })
+}
+
+function loadScanHistory(): Promise<ScanRecord[]> {
+  return new Promise((resolve) => {
+    chrome.storage.local.get([SCAN_HISTORY_KEY], (result) => {
+      resolve((result?.[SCAN_HISTORY_KEY] as ScanRecord[]) ?? [])
+    })
+  })
+}
+
+type SimilarProduct = {
+  title?: string
+  asin?: string
+  brand?: string
+  rating?: string | number
+  reviewCount?: number
+  price?: string | number | null
+  isPrime?: boolean
+  image?: string
+  amazonUrl?: string
+}
+
 type Analysis = {
   asin?: string
   productKeyword?: string
@@ -32,17 +143,7 @@ type Analysis = {
     reviewsAnalyzed?: number
     commonKeywords?: Keyword[]
   }
-  similarProducts?: {
-    title?: string
-    asin?: string
-    brand?: string
-    rating?: string | number
-    reviewCount?: number
-    price?: string
-    isPrime?: boolean
-    image?: string
-    amazonUrl?: string
-  }[]
+  similarProducts?: SimilarProduct[]
   aiAnalysis?: {
     pros?: string[]
     cons?: string[]
@@ -222,11 +323,41 @@ function MetricBar({ label, value }: { label: string; value?: number }) {
   )
 }
 
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+function SectionCard({
+  title,
+  children,
+  collapsible = false,
+  defaultOpen = true,
+  rightSlot,
+}: {
+  title: string
+  children: React.ReactNode
+  collapsible?: boolean
+  defaultOpen?: boolean
+  rightSlot?: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+
   return (
     <section className="section-card">
-      <h3>{title}</h3>
-      {children}
+      <div className="section-card-header">
+        <h3>{title}</h3>
+
+        <div className="section-card-actions">
+          {rightSlot}
+          {collapsible && (
+            <button
+              type="button"
+              className="collapse-btn"
+              onClick={() => setOpen((prev) => !prev)}
+            >
+              {open ? 'Hide' : 'Show'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {(!collapsible || open) && children}
     </section>
   )
 }
@@ -345,9 +476,28 @@ export default function App() {
   const [error, setError] = useState('')
   const [hasScanned, setHasScanned] = useState<boolean>(DEV_PREVIEW)
 
+  const [lastScan, setLastScan] = useState<ScanRecord | null>(null)
+  const [scanHistory, setScanHistory] = useState<ScanRecord[]>([])
+
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       setCurrentUrl(tabs[0]?.url ?? 'No active tab found')
+    })
+
+    loadLastScan().then((saved) => {
+      if (saved?.analysis) {
+        setLastScan(saved)
+
+        if (!DEV_PREVIEW) {
+          setAnalysis(saved.analysis)
+          setHasScanned(true)
+          setBackendStatus('Loaded last saved scan')
+        }
+      }
+    })
+
+    loadScanHistory().then((history) => {
+      setScanHistory(history)
     })
   }, [])
 
@@ -393,9 +543,30 @@ export default function App() {
           return
         }
 
-        setAnalysis(data.analysis ?? null)
+        const nextAnalysis = data.analysis ?? null
+
+        setAnalysis(nextAnalysis)
         setBackendStatus('Analysis complete')
         setHasScanned(true)
+
+        if (nextAnalysis) {
+          const record: ScanRecord = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            scannedAt: new Date().toISOString(),
+            url,
+            analysis: nextAnalysis,
+          }
+
+          setLastScan(record)
+          saveLastScan(record)
+
+          saveScanToHistory(record)
+
+          setScanHistory((prev) => {
+            const next = [record, ...prev].slice(0, MAX_SCAN_HISTORY)
+            return next
+          })
+        }
       } catch {
         const msg = 'Scan failed. Is the server running?'
         setBackendStatus(msg)
@@ -438,13 +609,66 @@ export default function App() {
             </button>
           </SectionCard>
 
+          {lastScan && !loading && (
+            <SectionCard title="Last Saved Scan" collapsible defaultOpen={false}>
+              <div className="saved-scan-box">
+                <p className="body-text"><strong>Product:</strong> {lastScan.analysis.title ?? 'Unknown product'}</p>
+                <p className="body-text"><strong>Saved:</strong> {new Date(lastScan.scannedAt).toLocaleString()}</p>
+                <p className="body-text"><strong>Score:</strong> {lastScan.analysis.overallScore ?? 'N/A'}</p>
+
+                <div className="saved-scan-actions">
+                  <button
+                    className="secondary-btn"
+                    onClick={() => {
+                      setAnalysis(lastScan.analysis)
+                      setHasScanned(true)
+                      setBackendStatus('Loaded saved scan')
+                      setError('')
+                    }}
+                  >
+                    Load Last Scan
+                  </button>
+                </div>
+              </div>
+            </SectionCard>
+          )}
+
+          {scanHistory.length > 0 && !loading && (
+            <SectionCard title="Scan History" collapsible defaultOpen={false}>
+              <div className="scan-history-list">
+                {scanHistory.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="history-item"
+                    onClick={() => {
+                      setAnalysis(item.analysis)
+                      setHasScanned(true)
+                      setBackendStatus('Loaded scan from history')
+                      setError('')
+                    }}
+                  >
+                    <div className="history-item-top">
+                      <p className="history-item-title">{item.analysis.title ?? 'Untitled Product'}</p>
+                      <span className="history-score">{item.analysis.overallScore ?? '--'}</span>
+                    </div>
+
+                    <p className="history-item-meta">
+                      {item.analysis.brand ?? 'Unknown brand'} • {new Date(item.scannedAt).toLocaleString()}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </SectionCard>
+          )}
+
           {/* Show skeletons while a scan is in flight */}
           {loading && <SkeletonResults />}
 
           {/* Show real results once loaded */}
           {!loading && hasScanned && analysis && (
             <>
-              <SectionCard title="Overall Score">
+              <SectionCard title="Overall Score" collapsible>
                 <div className="score-row">
                   <span className="score-number">{analysis.overallScore ?? '--'}</span>
                   <span className="score-max">/100</span>
@@ -452,7 +676,7 @@ export default function App() {
                 <MetricBar label="Trust Score" value={analysis.overallScore} />
               </SectionCard>
 
-              <SectionCard title="Product">
+              <SectionCard title="Product" collapsible>
                 <div className="info-list">
                   <p><strong>Title:</strong> {analysis.title ?? 'N/A'}</p>
                   <p><strong>Brand:</strong> {analysis.brand ?? 'N/A'}</p>
@@ -464,7 +688,7 @@ export default function App() {
 
               {analysis.aiAnalysis && <VerdictCard ai={analysis.aiAnalysis} />}
 
-              <SectionCard title="Review Integrity">
+              <SectionCard title="Review Integrity" collapsible>
                 <div className="mini-score">
                   <span>Score</span>
                   <strong>{analysis.reviewIntegrity?.score ?? 'N/A'}</strong>
@@ -480,7 +704,7 @@ export default function App() {
                 <ScoreExplainer metric="review_integrity" analysis={analysis} />
               </SectionCard>
 
-              <SectionCard title="Brand Reputation">
+              <SectionCard title="Brand Reputation" collapsible>
                 <div className="mini-score">
                   <span>Score</span>
                   <strong>{analysis.brandReputation?.score ?? 'N/A'}</strong>
@@ -510,25 +734,48 @@ export default function App() {
               <SectionCard title="Similar Products">
                 {(analysis.similarProducts?.length ?? 0) > 0 ? (
                   <div className="similar-scroll">
-                    {analysis.similarProducts?.map((product, i) => (
-                      <a
-                        key={product.asin ?? i}
-                        href={product.amazonUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="similar-card"
-                      >
-                        {product.image
-                          ? <img src={product.image} alt={product.title ?? 'Product'} className="similar-card-image" />
-                          : <ProductImagePlaceholder />
-                        }
-                        <p className="similar-card-title">{product.title ?? 'Untitled Product'}</p>
-                        <p className="similar-card-brand">{product.brand ?? 'Unknown brand'}</p>
-                        <p className="similar-card-price">{product.price ?? 'No price'}</p>
-                        <p className="similar-card-rating">⭐ {product.rating ?? 'N/A'}</p>
-                        {product.isPrime && <p className="similar-card-prime">Prime</p>}
-                      </a>
-                    ))}
+                    {analysis.similarProducts?.map((product, i) => {
+                      const comparison = compareProductAgainstCurrent(analysis, product)
+
+                      return (
+                        <a
+                          key={product.asin ?? i}
+                          href={product.amazonUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="similar-card"
+                        >
+                          <div className="similar-card-top">
+                            <span className={getTagClassName(comparison.tag)}>
+                              {comparison.tag}
+                            </span>
+                            {product.isPrime && <span className="prime-badge">Prime</span>}
+                          </div>
+
+                          {product.image
+                            ? <img src={product.image} alt={product.title ?? 'Product'} className="similar-card-image" />
+                            : <ProductImagePlaceholder />
+                          }
+
+                          <p className="similar-card-title">{product.title ?? 'Untitled Product'}</p>
+                          <p className="similar-card-brand">{product.brand ?? 'Unknown brand'}</p>
+
+                          <div className="similar-card-price-row">
+                            <p className="similar-card-price">{product.price ?? 'No price'}</p>
+                            {comparison.priceDiff !== null && (
+                              <span className={`price-diff ${comparison.priceDiff <= 0 ? 'price-diff--down' : 'price-diff--up'}`}>
+                                {formatPriceDifference(comparison.priceDiff)}
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="similar-card-rating">
+                            ⭐ {product.rating ?? 'N/A'}
+                            {product.reviewCount ? ` • ${product.reviewCount.toLocaleString()} reviews` : ''}
+                          </p>
+                        </a>
+                      )
+                    })}
                   </div>
                 ) : (
                   <p className="body-text muted">No similar products found.</p>
