@@ -7,8 +7,8 @@ Nectar is a product-analyzer Chrome extension that compares products and provide
 
 ## Clone Repository:
 ```bash
-git clone https://github.com/aagarw56/GDGC-Ballers.git
-cd GDGC-Ballers
+git clone https://github.com/shivankvirdi/Nectar-GDG.git
+cd Nectar-GDG
 ```
 ## Backend Setup
 ```bash
@@ -47,7 +47,7 @@ npm run build
 1. Go to chrome://extensions/
 2. Enable "Developer mode"
 3. Click load unpacked
-4. Select GDGC-Ballers/frontend/dist
+4. Select Nectar-GDG/frontend/dist
 
 ## Deploying Backend Server
 ### Use hosted backend (Recommended): 
