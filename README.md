@@ -24,7 +24,10 @@ source .venv/bin/activate # Mac/Linux
 ```bash
 pip install -r requirements.txt
 ```
-## Create .env in ROOT directory:
+## Create .env in ROOT directory and add keys from:
+https://www.canopyapi.co/  
+https://aistudio.google.com/app/api-keys  
+https://console.cloud.google.com/marketplace/product/google/places-backend.googleapis.com
 ```
 CANOPY_API_KEY="your_api_key_here"
 GEMINI_API_KEY="your_api_key_here"
@@ -65,4 +68,4 @@ cd ..
 uvicorn backend.main:app --reload
 ```
 _____________________________________________________________________________________________________________________________________________________
-Co-developed by Shivank Virdi, Iyanna Arches, Jaycob Pakingan, Aanya Agarwal, & Kaylana Chaun. We hope you enjoy using our extension!
+Project led by Shivank Virdi and co-developed with Jaycob Pakingan, Iyanna Arches, Aanya Agarwal, & Kaylana Chaun. We hope you enjoy using our extension!
