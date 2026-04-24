@@ -6,22 +6,22 @@ https://github.com/user-attachments/assets/503b7d96-bcd8-418d-aa47-0589f6e007b4
 Nectar is a product-analyzer Chrome extension that compares products and provides in-depth information on price points, review integrity, quality, brand reputation, and more, recommending the best option. Our mission is to reduce shoppers’ stress when buying products and provide a more educated shopping experience.
 
 ## Clone Repository:
-```bash
+```powershell
 git clone https://github.com/shivankvirdi/Nectar-GDG.git
 cd Nectar-GDG
 ```
 ## Backend Setup
-```bash
+```powershell
 cd backend
 python -m venv .venv
 ```
 ### Activate virtual environment
-```bash
+```powershell
 .venv\Scripts\activate # Windows
 source .venv/bin/activate # Mac/Linux
 ```
 ### Install dependencies
-```bash
+```powershell
 pip install -r requirements.txt
 ```
 ## Create .env in ROOT directory and add keys
@@ -35,12 +35,12 @@ GOOGLE_PLACES_API_KEY=your_api_key_here
 ```
 ## Frontend Setup
 Install Node.js (http://nodejs.org/en/download) and add to PATH.
-```bash
+```powershell
 cd frontend
 npm install
 ```
 ### Build extension
-```bash
+```powershell
 npm run build
 ```
 ## Load Extension
@@ -54,16 +54,16 @@ npm run build
 The backend is already deployed on Render -- no setup required.  
 ### Deploy locally (Optional)
 1. Set frontend/.env.production to:
-```bash
+```powershell
 VITE_API_URL=http://127.0.0.1:8000
 ```
 3. Rebuild extension:
-```bash
+```powershell
 cd frontend
 npm run build
 ```
 4. Run backend:
-```bash
+```powershell
 cd ..
 uvicorn backend.main:app --reload
 ```
