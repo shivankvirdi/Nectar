@@ -4,16 +4,10 @@ import os
 import re
 import time
 import requests
-from urllib.parse import quote_plus
 
 from .nlp_utils import extract_keywords, sia, STOP_WORDS
 
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
-
-# ─── TTL cache ─────────────────────────────────────────────────────────────────
-# Keyed by lowercase brand name. Value is (result_dict, unix_timestamp).
-# Without this, every scan of any product from the same brand re-hits the
-# Google Places API and re-scrapes Trustpilot, even within the same session.
 
 _brand_cache: dict[str, tuple[dict, float]] = {}
 CACHE_TTL_SECONDS = 3600  # 1 hour
@@ -33,7 +27,7 @@ def _cache_set(brand_name: str, result: dict) -> None:
     _brand_cache[brand_name.lower().strip()] = (result, time.time())
 
 
-# ─── Domain-specific word lists ───────────────────────────────────────────────
+# Domain-specific word lists
 
 BRAND_NOISE_WORDS = {
     "also", "like", "just", "really", "very", "good", "great", "nice", "love",
@@ -101,7 +95,7 @@ def extract_common_keywords(reviews: list, top_n: int = 10) -> list:
     )
 
 
-# ─── Brand name normalisation helpers ─────────────────────────────────────────
+# Brand name normalisation helpers
 
 def normalize_brand(brand: str) -> str:
     if not brand:
@@ -139,58 +133,114 @@ def fuzzy_match(a: str, b: str) -> bool:
     b2 = re.sub(r"[^a-z0-9]", "", b.lower())
     return bool(a2 and b2 and (a2 == b2 or a2 in b2 or b2 in a2))
 
+# Google Places helpers
 
-# ─── Google Places helpers ────────────────────────────────────────────────────
+def _extract_display_name(place: dict) -> str:
+    display_name = place.get("displayName")
+
+    if isinstance(display_name, dict):
+        return (display_name.get("text") or "").strip()
+
+    if isinstance(display_name, str):
+        return display_name.strip()
+
+    return (place.get("name") or "").strip()
+
+
+def _extract_review_text(review: dict) -> str:
+    text = review.get("text")
+
+    if isinstance(text, dict):
+        return (text.get("text") or "").strip()
+
+    if isinstance(text, str):
+        return text.strip()
+
+    original_text = review.get("originalText")
+
+    if isinstance(original_text, dict):
+        return (original_text.get("text") or "").strip()
+
+    if isinstance(original_text, str):
+        return original_text.strip()
+
+    return ""
+
 
 def find_google_place(brand_name: str) -> dict | None:
     if not GOOGLE_PLACES_API_KEY:
         return None
+
+    url = "https://places.googleapis.com/v1/places:searchText"
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
+        "X-Goog-FieldMask": "places.id,places.displayName,places.rating,places.userRatingCount",
+    }
+
     for candidate in get_brand_candidates(brand_name):
-        url    = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json"
-        params = {
-            "input":     candidate,
-            "inputtype": "textquery",
-            "fields":    "place_id,name,rating,user_ratings_total",
-            "key":       GOOGLE_PLACES_API_KEY,
+        body = {
+            "textQuery": candidate,
+            "pageSize": 1,
         }
+
         try:
-            resp = requests.get(url, params=params, timeout=15)
+            resp = requests.post(url, json=body, headers=headers, timeout=15)
+
             if resp.status_code != 200:
+                print(f"[Reputation] Google Text Search error for '{candidate}': {resp.status_code} {resp.text}")
                 continue
-            candidates_found = resp.json().get("candidates", [])
-            if candidates_found:
-                best = candidates_found[0]
-                print(f"[Reputation] Google matched '{best.get('name')}' for '{candidate}'")
+
+            places_found = resp.json().get("places", [])
+
+            if places_found:
+                best = places_found[0]
+                print(f"[Reputation] Google matched '{_extract_display_name(best)}' for '{candidate}'")
                 return best
         except Exception as e:
-            print(f"[Reputation] Google Find Place error for '{candidate}': {e}")
+            print(f"[Reputation] Google Text Search error for '{candidate}': {e}")
+
     return None
 
 
 def get_google_place_details(place_id: str) -> dict:
     if not GOOGLE_PLACES_API_KEY or not place_id:
         return {}
-    url    = "https://maps.googleapis.com/maps/api/place/details/json"
-    params = {
-        "place_id":     place_id,
-        "fields":       "name,rating,user_ratings_total,reviews",
-        "reviews_sort": "most_relevant",
-        "key":          GOOGLE_PLACES_API_KEY,
+
+    url = f"https://places.googleapis.com/v1/places/{place_id}"
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
+        "X-Goog-FieldMask": "id,displayName,rating,userRatingCount,reviews",
     }
+
     try:
-        resp = requests.get(url, params=params, timeout=15)
-        return resp.json().get("result", {}) if resp.status_code == 200 else {}
+        resp = requests.get(url, headers=headers, timeout=15)
+
+        if resp.status_code != 200:
+            print(f"[Reputation] Google Place Details error: {resp.status_code} {resp.text}")
+            return {}
+
+        return resp.json()
     except Exception as e:
         print(f"[Reputation] Google Place Details error: {e}")
         return {}
 
 
 def normalize_google_reviews(place_details: dict) -> list[dict]:
-    return [
-        {"text": (r.get("text") or "").strip(), "title": "", "rating": r.get("rating", 3)}
-        for r in place_details.get("reviews", []) or []
-        if (r.get("text") or "").strip()
-    ]
+    result = []
+
+    for review in place_details.get("reviews", []) or []:
+        text = _extract_review_text(review)
+
+        if text:
+            result.append({
+                "text": text,
+                "title": "",
+                "rating": review.get("rating", 3),
+            })
+
+    return result
 
 
 def normalize_amazon_reviews(amazon_reviews: list | None) -> list[dict]:
@@ -210,7 +260,7 @@ def normalize_amazon_reviews(amazon_reviews: list | None) -> list[dict]:
     return result
 
 
-# ─── Insight + scoring ────────────────────────────────────────────────────────
+# Insight + scoring 
 
 def build_reputation_insights(
     reviews: list,
@@ -296,24 +346,20 @@ def build_reputation_insights(
     }
 
 
-# ─── Main entry point ─────────────────────────────────────────────────────────
-
 async def get_brand_reputation(
     brand_name: str,
     amazon_reviews: list | None = None,
 ) -> dict:
     print(f"\n[Reputation] Analyzing brand: '{brand_name}'")
 
-    # ── Check cache first ──────────────────────────────────────────────────
     cached = _cache_get(brand_name)
     if cached is not None:
         return cached
 
-    # ── Try Google Places ──────────────────────────────────────────────────
     google_reviews: list[dict] = []
     place = find_google_place(brand_name) if GOOGLE_PLACES_API_KEY else None
     if place:
-        details = get_google_place_details(place.get("place_id", ""))
+        details = get_google_place_details(place.get("id", ""))
         google_reviews = normalize_google_reviews(details)
         print(f"[Reputation] Google reviews found: {len(google_reviews)}")
     else:
@@ -322,7 +368,6 @@ async def get_brand_reputation(
     amazon_normalized = normalize_amazon_reviews(amazon_reviews)
     print(f"[Reputation] Amazon fallback reviews: {len(amazon_normalized)}")
 
-    # ── Choose best source ─────────────────────────────────────────────────
     if len(google_reviews) >= 3:
         result = build_reputation_insights(google_reviews, brand_name, "google_places")
     elif amazon_normalized:
@@ -347,6 +392,6 @@ async def get_brand_reputation(
             "source": "no_brand_review_source_available",
         }
 
-    # ── Store in cache before returning ───────────────────────────────────
+    # Store in cache before returning
     _cache_set(brand_name, result)
     return result

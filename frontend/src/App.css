@@ -1295,3 +1295,79 @@ body {
     animation: none;
   }
 }
+
+/* Scan history management */
+.scan-history-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.scan-history-count {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #78716c;
+}
+
+.history-clear-btn {
+  border: 1px solid #f3dfcf;
+  background: #fffaf5;
+  color: #c2410c;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.history-clear-btn:hover {
+  transform: translateY(-1px);
+  border-color: #fdba74;
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.history-item-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-compare-btn {
+  flex: 1;
+  padding: 9px 10px;
+  font-size: 11px;
+}
+
+.history-delete-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #ece7e2;
+  background: #ffffff;
+  color: #9ca3af;
+  border-radius: 999px;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.history-delete-btn:hover {
+  transform: translateY(-1px);
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.history-clear-btn:focus-visible,
+.history-delete-btn:focus-visible {
+  outline: 2px solid rgba(249, 115, 22, 0.35);
+  outline-offset: 2px;
+}

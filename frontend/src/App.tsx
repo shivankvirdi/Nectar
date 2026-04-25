@@ -177,6 +177,12 @@ function storageSet(values: Record<string, unknown>): Promise<void> {
   })
 }
 
+function storageRemove(keys: string[]): Promise<void> {
+  return new Promise((resolve) => {
+    chrome.storage.local.remove(keys, () => resolve())
+  })
+}
+
 function loadCurrentSavedScan(): Promise<ScanRecord | null> {
   return storageGet<ScanRecord>(CURRENT_SCAN_KEY)
 }
@@ -677,8 +683,70 @@ export default function App() {
     })
   }
 
+  const handleDeleteScan = async (id: string) => {
+    const itemToDelete = scanHistory.find((item) => item.id === id)
+    const nextHistory = scanHistory.filter((item) => item.id !== id)
+
+    await storageSet({
+      [SCAN_HISTORY_KEY]: nextHistory,
+    })
+
+    const currentScan = await loadCurrentSavedScan()
+    const previousScan = await loadPreviousSavedScan()
+    const cleanupKeys: string[] = []
+
+    if (currentScan?.id === id) cleanupKeys.push(CURRENT_SCAN_KEY)
+    if (previousScan?.id === id) cleanupKeys.push(PREVIOUS_SCAN_KEY)
+    if (cleanupKeys.length) await storageRemove(cleanupKeys)
+
+    setScanHistory(nextHistory)
+    setSelectedCompareIds((prev) => prev.filter((itemId) => itemId !== id))
+
+    if (currentSavedScan?.id === id) setCurrentSavedScan(null)
+    if (previousSavedScan?.id === id) setPreviousSavedScan(null)
+
+    if (itemToDelete?.analysis === analysis) {
+      setAnalysis(null)
+      setHasScanned(false)
+    }
+
+    setBackendStatus('Removed scan from history')
+    setError('')
+  }
+
+  const handleClearScanHistory = async () => {
+    await storageSet({
+      [SCAN_HISTORY_KEY]: [],
+    })
+    await storageRemove([CURRENT_SCAN_KEY, PREVIOUS_SCAN_KEY])
+
+    setScanHistory([])
+    setSelectedCompareIds([])
+    setCompareRecords(null)
+    setCurrentSavedScan(null)
+    setPreviousSavedScan(null)
+    setAnalysis(null)
+    setHasScanned(false)
+    setBackendStatus('Scan history cleared')
+    setError('')
+    setView('home')
+  }
+
   const scanHistorySection = scanHistory.length > 0 && (
-    <SectionCard title="Scan History" collapsible defaultOpen={false}>
+    <SectionCard title="Scan History" collapsible defaultOpen={!hasScanned}>
+      <div className="scan-history-toolbar">
+        <p className="scan-history-count">
+          {scanHistory.length} saved {scanHistory.length === 1 ? 'scan' : 'scans'}
+        </p>
+        <button
+          type="button"
+          className="history-clear-btn"
+          onClick={handleClearScanHistory}
+        >
+          Clear All
+        </button>
+      </div>
+
       <div className="scan-history-list">
         {scanHistory.map((item) => {
           const isSelected = selectedCompareIds.includes(item.id)
@@ -711,10 +779,19 @@ export default function App() {
               <div className="history-item-actions">
                 <button
                   type="button"
-                  className={`why-score-btn ${isSelected ? 'secondary-btn--active' : ''}`}
+                  className={`why-score-btn history-compare-btn ${isSelected ? 'secondary-btn--active' : ''}`}
                   onClick={() => toggleCompareSelection(item.id)}
                 >
                   {isSelected ? 'Selected for Compare' : 'Select to Compare'}
+                </button>
+                <button
+                  type="button"
+                  className="history-delete-btn"
+                  aria-label={`Delete scan for ${item.analysis.title ?? 'product'}`}
+                  title="Delete this scan"
+                  onClick={() => handleDeleteScan(item.id)}
+                >
+                  ×
                 </button>
               </div>
             </div>
