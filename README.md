@@ -68,4 +68,4 @@ cd ..
 uvicorn backend.main:app --reload
 ```
 ---
-Project led by Shivank Virdi and co-developed with Jaycob Pakingan, Iyanna Arches, Aanya Agarwal, & Kaylana Chaun. We hope you enjoy using our extension!
+Project led by Shivank Virdi and co-developed with Jaycob Pakingan, Iyanna Arches, Aanya Agarwal, & Kaylana Chuan. We hope you enjoy using our extension!
