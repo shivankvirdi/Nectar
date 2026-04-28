@@ -1,11 +1,22 @@
 # vision_model.py
+import asyncio
 import re
+from typing import Callable
 from urllib.parse import parse_qs, unquote, urlparse
 from .ai_analysis import get_ai_verdict
 
 from .brand_reputation import get_brand_reputation
 from .canopy_client import get_full_product_profile, search_similar_products
 from .review_integrity import analyze_review_integrity
+
+
+class ScanCancelled(Exception):
+    pass
+
+
+def _raise_if_cancelled(is_cancelled: Callable[[], bool] | None) -> None:
+    if is_cancelled and is_cancelled():
+        raise ScanCancelled()
 
 # ─── Product keyword list ───────────────────────────────────────────
 # Rules:
@@ -526,21 +537,30 @@ def build_similar_search_terms(
 
 # ─── Main analysis entry point ────────────────────────────────────────────────
 
-async def analyze_product_url(url: str) -> dict:
+async def analyze_product_url(
+    url: str,
+    is_cancelled: Callable[[], bool] | None = None,
+) -> dict:
+    _raise_if_cancelled(is_cancelled)
+
     asin = extract_asin(url)
     if not asin:
         raise ValueError("Could not find an Amazon ASIN in the provided URL.")
 
     product_keyword = extract_product_keyword(url)
-    profile         = get_full_product_profile(asin)
+    profile         = await asyncio.to_thread(get_full_product_profile, asin)
+    _raise_if_cancelled(is_cancelled)
 
     product = profile.get("product", {})
     brand   = profile.get("brand", "") or product.get("brand", "")
     reviews = profile.get("reviews") or []
 
     review_integrity = analyze_review_integrity(reviews)
+    _raise_if_cancelled(is_cancelled)
 
-    brand_reputation = await get_brand_reputation(brand, reviews) if brand else {
+    brand_reputation = await asyncio.to_thread(
+        lambda: asyncio.run(get_brand_reputation(brand, reviews))
+    ) if brand else {
         "brand":                "",
         "reputation_score_pct": None,
         "overall_label":        "Brand not found.",
@@ -548,6 +568,7 @@ async def analyze_product_url(url: str) -> dict:
         "reviews_analyzed":     0,
         "commonKeywords":       [],
     }
+    _raise_if_cancelled(is_cancelled)
 
     title                    = (product.get("title") or "").strip()
     brand_name               = (brand or "").strip()
@@ -555,7 +576,10 @@ async def analyze_product_url(url: str) -> dict:
 
     similar_products: list = []
     for term in build_similar_search_terms(title, brand_name, resolved_product_keyword):
-        results = clean_similar_products(search_similar_products(term), asin, title)
+        _raise_if_cancelled(is_cancelled)
+        search_results = await asyncio.to_thread(search_similar_products, term)
+        _raise_if_cancelled(is_cancelled)
+        results = clean_similar_products(search_results, asin, title)
         if results:
             similar_products = results
             break
@@ -565,13 +589,16 @@ async def analyze_product_url(url: str) -> dict:
     reputation_score = brand_reputation.get("reputation_score_pct") or 50
     overall_score    = build_overall_score(rating, integrity_score, reputation_score)
 
-    ai_analysis = get_ai_verdict(
+    _raise_if_cancelled(is_cancelled)
+    ai_analysis = await asyncio.to_thread(
+        get_ai_verdict,
         title=title,
         reviews=reviews,
         overall_score=overall_score,
         integrity_score=integrity_score,
         reputation_score=reputation_score,
     )
+    _raise_if_cancelled(is_cancelled)
 
     return {
         "asin":           asin,

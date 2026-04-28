@@ -16,6 +16,11 @@ if not GEMINI_API_KEY:
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 
+def _is_quota_exhausted(error: Exception) -> bool:
+    message = str(error).upper()
+    return "RESOURCE_EXHAUSTED" in message or "429" in message or "QUOTA" in message
+
+
 def get_ai_verdict(
     title: str,
     reviews: list,
@@ -128,6 +133,10 @@ Rules:
                     }
 
                 except Exception as e:
+                    if _is_quota_exhausted(e):
+                        print(f"[AI Analysis] Quota exhausted for {model_name}; using fallback verdict.")
+                        return _fallback(overall_score)
+
                     print(f"[AI Analysis] ⚠️ {model_name} failed: {e}")
                     time.sleep(1.5 * (attempt + 1))
 
@@ -262,6 +271,10 @@ Return JSON only in this exact shape:
                     if answer:
                         return {"answer": answer}
                 except Exception as e:
+                    if _is_quota_exhausted(e):
+                        print(f"[AI Explain] Quota exhausted for {model_name}; using fallback explanation.")
+                        return {"answer": _score_explainer_fallback(metric_name, analysis)}
+
                     print(f"[AI Explain] ⚠️ {model_name} failed: {e}")
                     time.sleep(1.5 * (attempt + 1))
 

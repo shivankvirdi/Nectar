@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import PremiumScreen from './PremiumScreen'
 
@@ -9,6 +9,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 const EXIT_ANIMATION_MS = 720  // last staggered item: 0.30s delay + 0.38s anim = 680ms → round up
 const DELETE_ENTRY_DELAY_MS = 240
 const CLEAR_ALL_ENTRY_DELAY_MS = 260
+const SCAN_CANCEL_WINDOW_MS = 3000
 
 type Insight = { topic: string; status: string }
 type Keyword = { word: string; count: number; sentiment: 'positive' | 'negative' | 'neutral' }
@@ -526,6 +527,12 @@ export default function App() {
   const [compareRecords, setCompareRecords] = useState<[ScanRecord, ScanRecord] | null>(null)
   // FIX: tracks whether the results container is playing its exit waterfall animation
   const [isClearingCurrentView, setIsClearingCurrentView] = useState(false)
+  const [cancelAvailable, setCancelAvailable] = useState(false)
+  const scanAbortRef = useRef<AbortController | null>(null)
+  const scanIdRef = useRef<string | null>(null)
+  const cancelTimerRef = useRef<number | null>(null)
+  const scanDelayResolveRef = useRef<(() => void) | null>(null)
+  const scanWasCancelledRef = useRef(false)
 
   const toggleCompareSelection = (id: string) => {
     setSelectedCompareIds((prev) => {
@@ -578,7 +585,51 @@ export default function App() {
     loadCurrentSavedScan().then((saved) => { setCurrentSavedScan(saved) })
     loadPreviousSavedScan().then((saved) => { setPreviousSavedScan(saved) })
     loadScanHistory().then((history) => { setScanHistory(history) })
+
+    return () => {
+      if (cancelTimerRef.current !== null) window.clearTimeout(cancelTimerRef.current)
+      scanDelayResolveRef.current?.()
+      scanDelayResolveRef.current = null
+      scanAbortRef.current?.abort()
+    }
   }, [])
+
+  const closeCancelWindow = () => {
+    if (cancelTimerRef.current !== null) {
+      window.clearTimeout(cancelTimerRef.current)
+      cancelTimerRef.current = null
+    }
+    scanDelayResolveRef.current?.()
+    scanDelayResolveRef.current = null
+    setCancelAvailable(false)
+  }
+
+  const notifyBackendScanCancelled = (scanId: string | null) => {
+    if (!scanId) return
+    fetch(`${API_BASE}/cancel-scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scanId }),
+    }).catch(() => {
+      // The local abort is still authoritative for the UI.
+    })
+  }
+
+  const handleCancelScan = () => {
+    if (!loading || !cancelAvailable) return
+
+    scanWasCancelledRef.current = true
+    const scanId = scanIdRef.current
+    const controller = scanAbortRef.current
+    closeCancelWindow()
+    controller?.abort()
+    if (controller) notifyBackendScanCancelled(scanId)
+
+    setLoading(false)
+    setAnalysis(null)
+    setError('')
+    setBackendStatus('Scan has been cancelled successfully')
+  }
 
   const handleScan = async () => {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
@@ -604,18 +655,43 @@ export default function App() {
       }
 
       try {
+        scanWasCancelledRef.current = false
+
         setLoading(true)
+        setCancelAvailable(true)
         setError('')
         setAnalysis(null)
+        setBackendStatus('Scan will begin in 3 seconds…')
+
+        await new Promise<void>((resolve) => {
+          scanDelayResolveRef.current = resolve
+          cancelTimerRef.current = window.setTimeout(closeCancelWindow, SCAN_CANCEL_WINDOW_MS)
+        })
+
+        if (scanWasCancelledRef.current) {
+          return
+        }
+
+        const scanId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        const controller = new AbortController()
+        scanIdRef.current = scanId
+        scanAbortRef.current = controller
         setBackendStatus('Running product analyses…')
 
         const response = await fetch(`${API_BASE}/current-url`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url }),
+          body: JSON.stringify({ url, scanId }),
+          signal: controller.signal,
         })
 
         const data = await response.json()
+
+        if (response.status === 499 || data?.cancelled) {
+          setBackendStatus('Scan has been cancelled successfully')
+          setError('')
+          return
+        }
 
         if (!response.ok) {
           const msg = typeof data.detail === 'string' ? data.detail : 'Request failed.'
@@ -661,11 +737,21 @@ export default function App() {
 
         await storageSet({ [SCAN_HISTORY_KEY]: nextHistory })
         setScanHistory(nextHistory)
-      } catch {
+      } catch (err) {
+        if (scanWasCancelledRef.current || (err instanceof DOMException && err.name === 'AbortError')) {
+          setBackendStatus('Scan has been cancelled successfully')
+          setError('')
+          return
+        }
+
         const msg = 'Scan failed. Please open an Amazon product or start server.'
         setBackendStatus(msg)
         setError(msg)
       } finally {
+        closeCancelWindow()
+        scanAbortRef.current = null
+        scanIdRef.current = null
+        scanWasCancelledRef.current = false
         setLoading(false)
       }
     })
@@ -1060,6 +1146,15 @@ export default function App() {
               <button className="scan-btn scan-btn--hero" onClick={handleScan} disabled={loading}>
                 {loading ? 'Scanning…' : 'Scan Product'}
               </button>
+              {loading && cancelAvailable && (
+                <button
+                  type="button"
+                  className="scan-cancel-btn"
+                  onClick={handleCancelScan}
+                >
+                  <span>Cancel Scan</span>
+                </button>
+              )}
             </SectionCard>
           </div>
 

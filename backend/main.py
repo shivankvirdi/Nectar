@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from .vision_model import analyze_product_url
+from .vision_model import ScanCancelled, analyze_product_url
 from .ai_analysis import explain_score_with_ai
 
 app = FastAPI()
@@ -24,10 +24,16 @@ app.add_middleware(
 
 class UrlPayload(BaseModel):
     url: str
+    scanId: str | None = None
+
+class CancelScanPayload(BaseModel):
+    scanId: str
 
 class ExplainScorePayload(BaseModel):
     metric: str
     analysis: dict[str, Any]
+
+active_scan_cancellations: dict[str, asyncio.Event] = {}
 
 @app.get("/health")
 async def health():
@@ -35,13 +41,33 @@ async def health():
 
 @app.post("/current-url")
 async def analyze_product(payload: UrlPayload):
+    cancel_event: asyncio.Event | None = None
+    if payload.scanId:
+        cancel_event = asyncio.Event()
+        active_scan_cancellations[payload.scanId] = cancel_event
+
     try:
-        analysis = await analyze_product_url(payload.url)
+        analysis = await analyze_product_url(
+            payload.url,
+            is_cancelled=cancel_event.is_set if cancel_event else None,
+        )
         return {"ok": True, "analysis": analysis}
+    except ScanCancelled:
+        return {"ok": False, "cancelled": True}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    finally:
+        if payload.scanId:
+            active_scan_cancellations.pop(payload.scanId, None)
+
+@app.post("/cancel-scan")
+async def cancel_scan(payload: CancelScanPayload):
+    cancel_event = active_scan_cancellations.get(payload.scanId)
+    if cancel_event:
+        cancel_event.set()
+    return {"ok": True, "cancelled": bool(cancel_event)}
 
 @app.post("/explain-score")
 async def explain_score(payload: ExplainScorePayload):

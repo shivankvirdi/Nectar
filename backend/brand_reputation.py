@@ -3,6 +3,7 @@
 import os
 import re
 import time
+import math
 import requests
 
 from .nlp_utils import extract_keywords, sia, STOP_WORDS
@@ -11,6 +12,8 @@ GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
 
 _brand_cache: dict[str, tuple[dict, float]] = {}
 CACHE_TTL_SECONDS = 3600  # 1 hour
+REPUTATION_PRIOR_SCORE = 68
+MIN_GOOGLE_AGGREGATE_RATINGS = 25
 
 
 def _cache_get(brand_name: str) -> dict | None:
@@ -62,6 +65,8 @@ BRAND_BOOST = {
     "damaged", "broken", "missing", "wrong", "correct", "accurate",
     "trustworthy", "reliable", "unreliable", "scam", "legitimate", "fake",
     "customer", "experience", "received", "waiting", "quality",
+    "warranty", "replacement", "repair", "defect", "defective", "durable",
+    "durability", "performance", "value", "premium", "cheap", "expensive",
 }
 
 BRAND_BIGRAMS = {
@@ -82,15 +87,36 @@ BRAND_BIGRAMS = {
 
 def extract_common_keywords(reviews: list, top_n: int = 10) -> list:
     """Thin wrapper so callers keep the same API as before."""
+    populated_reviews = [
+        review for review in reviews
+        if isinstance(review, dict) and (review.get("text") or "").strip()
+    ]
+    total = len(populated_reviews)
+    min_doc_freq = 1 if total < 4 else 2 if total < 10 else 3
+
+    keywords = extract_keywords(
+        reviews,
+        field="text",
+        noise_words=BRAND_NOISE_WORDS,
+        boost_words=BRAND_BOOST,
+        curated_bigrams=BRAND_BIGRAMS,
+        min_doc_freq=min_doc_freq,
+        min_word_length=4,
+        use_proper_noun_filter=total >= 4,
+        top_n=top_n,
+    )
+    if len(keywords) >= min(top_n, 5) or total == 0:
+        return keywords
+
     return extract_keywords(
         reviews,
         field="text",
         noise_words=BRAND_NOISE_WORDS,
         boost_words=BRAND_BOOST,
         curated_bigrams=BRAND_BIGRAMS,
-        min_doc_freq=3,
-        min_word_length=5,
-        use_proper_noun_filter=True, 
+        min_doc_freq=1,
+        min_word_length=4,
+        use_proper_noun_filter=False,
         top_n=top_n,
     )
 
@@ -132,6 +158,43 @@ def fuzzy_match(a: str, b: str) -> bool:
     a2 = re.sub(r"[^a-z0-9]", "", a.lower())
     b2 = re.sub(r"[^a-z0-9]", "", b.lower())
     return bool(a2 and b2 and (a2 == b2 or a2 in b2 or b2 in a2))
+
+
+def _rating_to_float(value: object, fallback: float = 3.0) -> float:
+    try:
+        parsed = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        parsed = fallback
+    return max(1.0, min(5.0, parsed))
+
+
+def _count_to_int(value: object) -> int | None:
+    try:
+        parsed = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return max(0, parsed)
+
+
+def _pct_from_rating(rating: float) -> float:
+    return (max(1.0, min(5.0, rating)) / 5.0) * 100
+
+
+def _confidence_from_review_count(review_count: int) -> float:
+    if review_count <= 0:
+        return 0.0
+    return min(0.7, review_count / 16)
+
+
+def _confidence_from_aggregate_count(rating_count: int | None) -> float:
+    if not rating_count:
+        return 0.0
+    return min(0.45, math.log10(rating_count + 1) / 8)
+
+
+def _google_place_is_brand_match(place: dict, brand_name: str) -> bool:
+    display_name = _extract_display_name(place)
+    return fuzzy_match(display_name, brand_name)
 
 # Google Places helpers
 
@@ -181,7 +244,7 @@ def find_google_place(brand_name: str) -> dict | None:
     for candidate in get_brand_candidates(brand_name):
         body = {
             "textQuery": candidate,
-            "pageSize": 1,
+            "pageSize": 5,
         }
 
         try:
@@ -193,10 +256,14 @@ def find_google_place(brand_name: str) -> dict | None:
 
             places_found = resp.json().get("places", [])
 
+            for place in places_found:
+                if _google_place_is_brand_match(place, brand_name):
+                    print(f"[Reputation] Google matched '{_extract_display_name(place)}' for '{candidate}'")
+                    return place
+
             if places_found:
-                best = places_found[0]
-                print(f"[Reputation] Google matched '{_extract_display_name(best)}' for '{candidate}'")
-                return best
+                names = ", ".join(_extract_display_name(place) for place in places_found[:3])
+                print(f"[Reputation] Skipping weak Google matches for '{candidate}': {names}")
         except Exception as e:
             print(f"[Reputation] Google Text Search error for '{candidate}': {e}")
 
@@ -266,16 +333,32 @@ def build_reputation_insights(
     reviews: list,
     brand_name: str,
     source_name: str = "brand_reviews",
+    aggregate_rating: float | None = None,
+    aggregate_rating_count: int | None = None,
 ) -> dict:
     if not reviews:
+        aggregate_confidence = _confidence_from_aggregate_count(aggregate_rating_count)
+        aggregate_score = None
+        if aggregate_rating is not None:
+            aggregate_pct = _pct_from_rating(_rating_to_float(aggregate_rating))
+            aggregate_score = round(
+                (REPUTATION_PRIOR_SCORE * (1 - aggregate_confidence))
+                + (aggregate_pct * aggregate_confidence)
+            )
+
         return {
             "brand": brand_name,
-            "reputation_score_pct": None,
-            "overall_label": "Insufficient brand review data found.",
+            "reputation_score_pct": aggregate_score,
+            "overall_label": "Limited brand reputation data; score is conservative."
+                if aggregate_score is not None
+                else "Insufficient brand review data found.",
             "avg_compound": None,
             "positive_pct": None,
             "negative_pct": None,
             "reviews_analyzed": 0,
+            "confidence": round(aggregate_confidence, 2),
+            "aggregateRating": aggregate_rating,
+            "aggregateRatingCount": aggregate_rating_count,
             "insights": [
                 {"topic": "Customer Support",    "status": "Unknown"},
                 {"topic": "Shipping & Delivery", "status": "Unknown"},
@@ -322,15 +405,34 @@ def build_reputation_insights(
         {"topic": "Build Quality",       "status": _status(quality_scores)},
     ]
 
-    avg_rating     = sum(float(r.get("rating", 3) or 3) for r in reviews) / total if total else 3
-    sentiment_pct  = ((avg_compound + 1) / 2) * 100
-    rating_pct     = (avg_rating / 5) * 100
-    rep_score      = round((sentiment_pct * 0.45) + (rating_pct * 0.55)) if total else None
+    avg_rating    = sum(_rating_to_float(r.get("rating", 3)) for r in reviews) / total if total else 3
+    sentiment_pct = ((avg_compound + 1) / 2) * 100
+    rating_pct    = _pct_from_rating(avg_rating)
 
-    if   rep_score >= 80: label = "Strong overall brand reputation."
-    elif rep_score >= 65: label = "Mostly positive brand reputation with some concerns."
-    elif rep_score >= 50: label = "Mixed brand reputation."
-    else:                 label = "Weak brand reputation based on available reviews."
+    review_signal = (rating_pct * 0.68) + (sentiment_pct * 0.32)
+    raw_score = review_signal
+
+    if aggregate_rating is not None:
+        aggregate_pct = _pct_from_rating(_rating_to_float(aggregate_rating))
+        aggregate_weight = _confidence_from_aggregate_count(aggregate_rating_count)
+        raw_score = (review_signal * (1 - aggregate_weight)) + (aggregate_pct * aggregate_weight)
+
+    confidence = min(
+        0.9,
+        _confidence_from_review_count(total) + _confidence_from_aggregate_count(aggregate_rating_count),
+    )
+    rep_score = round((REPUTATION_PRIOR_SCORE * (1 - confidence)) + (raw_score * confidence)) if total else None
+
+    if confidence < 0.25:
+        label = "Limited brand reputation data; score is conservative."
+    elif rep_score >= 80:
+        label = "Strong overall brand reputation."
+    elif rep_score >= 65:
+        label = "Mostly positive brand reputation with some concerns."
+    elif rep_score >= 50:
+        label = "Mixed brand reputation."
+    else:
+        label = "Weak brand reputation based on available reviews."
 
     return {
         "brand":                brand_name,
@@ -340,6 +442,9 @@ def build_reputation_insights(
         "positive_pct":         round((pos / total) * 100) if total else 0,
         "negative_pct":         round((neg / total) * 100) if total else 0,
         "reviews_analyzed":     total,
+        "confidence":           round(confidence, 2),
+        "aggregateRating":      aggregate_rating,
+        "aggregateRatingCount": aggregate_rating_count,
         "insights":             insights,
         "commonKeywords":       extract_common_keywords(reviews),
         "source":               source_name,
@@ -357,23 +462,52 @@ async def get_brand_reputation(
         return cached
 
     google_reviews: list[dict] = []
+    google_rating: float | None = None
+    google_rating_count: int | None = None
     place = find_google_place(brand_name) if GOOGLE_PLACES_API_KEY else None
     if place:
+        google_rating = place.get("rating")
+        google_rating_count = _count_to_int(place.get("userRatingCount"))
         details = get_google_place_details(place.get("id", ""))
+        google_rating = details.get("rating", google_rating)
+        google_rating_count = _count_to_int(details.get("userRatingCount", google_rating_count))
         google_reviews = normalize_google_reviews(details)
-        print(f"[Reputation] Google reviews found: {len(google_reviews)}")
+        print(
+            f"[Reputation] Google reviews found: {len(google_reviews)} "
+            f"(aggregate={google_rating}, count={google_rating_count})"
+        )
     else:
         print("[Reputation] No Google place match or API key missing")
 
     amazon_normalized = normalize_amazon_reviews(amazon_reviews)
     print(f"[Reputation] Amazon fallback reviews: {len(amazon_normalized)}")
 
-    if len(google_reviews) >= 3:
-        result = build_reputation_insights(google_reviews, brand_name, "google_places")
+    has_google_aggregate = bool(
+        google_rating is not None
+        and google_rating_count is not None
+        and google_rating_count >= MIN_GOOGLE_AGGREGATE_RATINGS
+    )
+
+    if len(google_reviews) >= 3 or has_google_aggregate:
+        combined_reviews = google_reviews + amazon_normalized
+        source = "google_places_and_product_reviews" if amazon_normalized else "google_places"
+        result = build_reputation_insights(
+            combined_reviews or google_reviews,
+            brand_name,
+            source,
+            aggregate_rating=google_rating,
+            aggregate_rating_count=google_rating_count,
+        )
     elif amazon_normalized:
         result = build_reputation_insights(amazon_normalized, brand_name, "amazon_reviews_fallback")
     elif google_reviews:
-        result = build_reputation_insights(google_reviews, brand_name, "google_places_limited")
+        result = build_reputation_insights(
+            google_reviews,
+            brand_name,
+            "google_places_limited",
+            aggregate_rating=google_rating,
+            aggregate_rating_count=google_rating_count,
+        )
     else:
         result = {
             "brand": brand_name,

@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;500;600;700;800&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,800,900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap');
 
 :root {
   --bg: #0a0a0a;
@@ -12,8 +13,10 @@
   --text: #f3efe8;
   --text-muted: #a19a92;
 
-  --font-display: 'Epilogue', sans-serif;
-  --font-mono: 'DM Mono', monospace;
+  --font-heading: 'Satoshi', sans-serif;
+  --font-body: 'Manrope', sans-serif;
+  --font-display: var(--font-heading);
+  --font-mono: var(--font-body);
 }
 
 /* RESET */
@@ -31,7 +34,7 @@ body,
 body {
   background: transparent;
   overflow-y: auto;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -66,7 +69,7 @@ body {
 
 /* LOGO / TITLE */
 .logo {
-  font-family: var(--font-display);
+  font-family: var(--font-heading);
   font-weight: 700;
   font-size: 20px;
   color: var(--text);
@@ -95,7 +98,7 @@ body {
   font-weight: 600;
   cursor: pointer;
   color: #ffffff;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
 }
 
 /* USAGE HEADER */
@@ -151,7 +154,7 @@ body {
   letter-spacing: -0.01em;
   margin-top: 12px;
   cursor: pointer;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
 }
 
 /* SUPPORT TEXT */
@@ -196,7 +199,7 @@ body {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-muted);
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-weight: 500;
   cursor: pointer;
 }
