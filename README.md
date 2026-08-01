@@ -146,7 +146,7 @@ npm install
 ```
 > Before building, choose your backend (see below) and create `frontend/.env.production` accordingly
 #### Use Hosted Backend (Requires a secret password)
-The backend is already deployed on Google Cloud!\
+The backend is already deployed on Google Cloud! (currently disabled)\
 Create file `frontend/.env.production`:
 ``` 
 VITE_API_URL=https://nectar-gdg-93066440894.us-west1.run.app
